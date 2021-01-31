@@ -5,7 +5,8 @@
 
 #include "fs33types.hpp"
 
-FILE *my_stream;
+FILE *my_stdout;
+FILE *my_stdin;
 
 extern MountEntry *mtab;
 extern VNIN cwdVNIN;
@@ -13,7 +14,8 @@ FileVolume *fv;
 Directory *wd;
 
 #define nArgsMax 10
-char types[1 + nArgsMax];  // +1 for \0
+#define nPipesMax 6
+char types[nPipesMax][1 + nArgsMax];  // +1 for \0
 
 /* An Arg-ument for one of our commands is either a "word" (a null
  * terminated string), or an unsigned integer.  We store both
@@ -23,17 +25,20 @@ class Arg {
    public:
     char *s;
     uint u;
-} arg[nArgsMax];
+} arg[nPipesMax][nArgsMax];
 
-uint nArgs = 0;
+int invokeTable[nPipesMax];
+char *cmds[nPipesMax];
+uint nArgs[nPipesMax];
+uint nCmds;
 
 uint TODO() {
-    fprintf(my_stream, "to be done!\n");
+    fprintf(my_stdout, "to be done!\n");
     return 0;
 }
 
 uint TODO(char *p) {
-    fprintf(my_stream, "%s to be done!\n", p);
+    fprintf(my_stdout, "%s to be done!\n", p);
     return 0;
 }
 
@@ -51,7 +56,7 @@ int toNum(const char *p) {
 SimDisk *mkSimDisk(byte *name) {
     SimDisk *simDisk = new SimDisk(name, 0);
     if (simDisk->nSectorsPerDisk == 0) {
-        fprintf(my_stream, "Failed to find/create simDisk named %s\n", name);
+        fprintf(my_stdout, "Failed to find/create simDisk named %s\n", name);
         delete simDisk;
         simDisk = 0;
     }
@@ -61,7 +66,7 @@ SimDisk *mkSimDisk(byte *name) {
 void doMakeDisk(Arg *a) {
     SimDisk *simDisk = mkSimDisk((byte *)a[0].s);
     if (simDisk == 0) return;
-    fprintf(my_stream, 
+    fprintf(my_stdout, 
         "new SimDisk(%s) = %p, nSectorsPerDisk=%d,"
         "nBytesPerSector=%d, simDiskNum=%d)\n",
         simDisk->name, (void *)simDisk, simDisk->nSectorsPerDisk,
@@ -79,7 +84,7 @@ void doWriteDisk(Arg *a) {
     for (uint m = strlen(st), n = 0; n < 1024 - m; n += m)
         memcpy(buf + n, st, m);  // fill with several copies of st
     uint r = simDisk->writeSector(a[1].u, (byte *)buf);
-    fprintf(my_stream, "write433disk(%d, %s...) == %d to Disk %s\n", a[1].u, st, r, a[0].s);
+    fprintf(my_stdout, "write433disk(%d, %s...) == %d to Disk %s\n", a[1].u, st, r, a[0].s);
     delete simDisk;
 }
 
@@ -89,7 +94,7 @@ void doReadDisk(Arg *a) {
     char buf[1024];  // assuming nBytesPerSectorMAX < 1024
     uint r = simDisk->readSector(a[1].u, (byte *)buf);
     buf[10] = 0;  // sentinel
-    fprintf(my_stream, "read433disk(%d, %s...) = %d from Disk %s\n", a[1].u, buf, r,
+    fprintf(my_stdout, "read433disk(%d, %s...) = %d from Disk %s\n", a[1].u, buf, r,
            a[0].s);
     delete simDisk;
 }
@@ -97,7 +102,7 @@ void doReadDisk(Arg *a) {
 void doQuit(Arg *a) { exit(0); }
 
 void doEcho(Arg *a) {
-    fprintf(my_stream, "%s#%d, %s#%d, %s#%d, %s#%d\n", a[0].s, a[0].u, a[1].s, a[1].u,
+    fprintf(my_stdout, "%s#%d, %s#%d, %s#%d, %s#%d\n", a[0].s, a[0].u, a[1].s, a[1].u,
            a[2].s, a[2].u, a[3].s, a[3].u);
 }
 
@@ -105,7 +110,7 @@ void doMakeFV(Arg *a) {
     SimDisk *simDisk = mkSimDisk((byte *)a[0].s);
     if (simDisk == 0) return;
     fv = simDisk->make33fv();
-    fprintf(my_stream, "make33fv() = %p, Name == %s, Disk# == %d\n", (void *)fv, a[0].s,
+    fprintf(my_stdout, "make33fv() = %p, Name == %s, Disk# == %d\n", (void *)fv, a[0].s,
            simDisk->simDiskNum);
 
     if (fv) {
@@ -114,19 +119,26 @@ void doMakeFV(Arg *a) {
     }
 }
 
+void doCat() {
+    char c;
+    while ((c = fgetc(my_stdin)) != EOF) {
+        fprintf(my_stdout, "%c", c);
+    }
+}
+
 void doCopyTo(byte *from, byte *to) {
     uint r = fv->write33file(to, from);
-    fprintf(my_stream, "write33file(%s, %s) == %d\n", to, from, r);
+    fprintf(my_stdout, "write33file(%s, %s) == %d\n", to, from, r);
 }
 
 void doCopyFrom(byte *from, byte *to) {
     uint r = fv->read33file(to, from);
-    fprintf(my_stream, "read33file(%s, %s) == %d\n", to, from, r);
+    fprintf(my_stdout, "read33file(%s, %s) == %d\n", to, from, r);
 }
 
 void doCopy33(byte *from, byte *to) {
     uint r = fv->copy33file(to, from);
-    fprintf(my_stream, "copy33file(%s, %s) == %d\n", to, from, r);
+    fprintf(my_stdout, "copy33file(%s, %s) == %d\n", to, from, r);
 }
 
 void doCopy(Arg *a) {
@@ -145,21 +157,21 @@ void doCopy(Arg *a) {
 }
 
 void doLsLong(Arg *a) {
-    fprintf(my_stream, "\nDirectory listing for disk %s, cwdVNIN == 0x%0lx begins:\n",
+    fprintf(my_stdout, "\nDirectory listing for disk %s, cwdVNIN == 0x%0lx begins:\n",
            wd->fv->simDisk->name, (ulong)cwdVNIN);
-    wd->ls(my_stream);
-    fprintf(my_stream, "Directory listing ends.\n");
+    wd->ls(my_stdout);
+    fprintf(my_stdout, "Directory listing ends.\n");
 }
 
 void doRm(Arg *a) {
     uint in = wd->fv->deleteFile((byte *)a[0].s);
-    fprintf(my_stream, "rm %s returns %d.\n", a[0].s, in);
+    fprintf(my_stdout, "rm %s returns %d.\n", a[0].s, in);
 }
 
 void doInode(Arg *a) {
     uint ni = a[0].u;
 
-    wd->fv->inodes.show(ni, my_stream);
+    wd->fv->inodes.show(ni, my_stdout);
 }
 
 void doMkDir(Arg *a) { TODO("doMkDir"); }
@@ -220,68 +232,109 @@ class CmdTable {
 uint ncmds = sizeof(cmdTable) / sizeof(CmdTable);
 
 void usage() {
-    fprintf(my_stream, "The shell has only the following cmds:\n");
+    fprintf(my_stdout, "The shell has only the following cmds:\n");
     for (uint i = 0; i < ncmds; i++)
-        fprintf(my_stream, "\t%s\t%s\n", cmdTable[i].cmdName, cmdTable[i].argsRequired);
-    fprintf(my_stream, "Start with ! to invoke a Unix shell cmd\n");
+        fprintf(my_stdout, "\t%s\t%s\n", cmdTable[i].cmdName, cmdTable[i].argsRequired);
+    fprintf(my_stdout, "Start with ! to invoke a Unix shell cmd\n");
 }
 
 /* pre:: k >= 0, arg[] are set already;; post:: Check that args are
  * ok, and the needed simDisk or cfv exists before invoking the
  * appropriate action. */
 
-void invokeCmd(int k, Arg *arg) {
+void invokeCmds() {
+    pid_t pid[nPipesMax];
+    int status;
     uint ok = 1;
-    if (cmdTable[k].globalsNeeded[0] == 'v' && cwdVNIN == 0) {
-        ok = 0;
-        fprintf(my_stream, "Cmd %s needs the cfv to be != 0.\n", cmdTable[k].cmdName);
-    } else if (cmdTable[k].globalsNeeded[0] == 'm' && mtab == 0) {
-        ok = 0;
-        fprintf(my_stream, "Cmd %s needs the mtab to be != 0.\n", cmdTable[k].cmdName);
-    }
+    for (uint j = 0; j < nCmds; j++) {
+        int k = invokeTable[j];
+        if (k != -1) {
+            if (cmdTable[k].globalsNeeded[0] == 'v' && cwdVNIN == 0) {
+                ok = 0;
+                fprintf(my_stdout, "Cmd %s needs the cfv to be != 0.\n", cmdTable[k].cmdName);
+            } else if (cmdTable[k].globalsNeeded[0] == 'm' && mtab == 0) {
+                ok = 0;
+                fprintf(my_stdout, "Cmd %s needs the mtab to be != 0.\n", cmdTable[k].cmdName);
+            }
 
-    char *req = cmdTable[k].argsRequired;
-    uint na = strlen(req);
-    for (uint i = 0; i < na; i++) {
-        if (req[i] == 's' && (arg[i].s == 0 || arg[i].s[0] == 0)) {
-            ok = 0;
-            fprintf(my_stream, "arg #%d must be a non-empty string.\n", i);
-        }
-        if ((req[i] == 'u') && (arg[i].s == 0 || !isDigit(arg[i].s[0]))) {
-            ok = 0;
-            fprintf(my_stream, "arg #%d (%s) must be a number.\n", i, arg[i].s);
+            char *req = cmdTable[k].argsRequired;
+            uint na = strlen(req);
+            for (uint i = 0; i < na; i++) {
+                if (req[i] == 's' && (arg[j][i].s == 0 || arg[j][i].s[0] == 0)) {
+                    ok = 0;
+                    fprintf(my_stdout, "arg #%d must be a non-empty string.\n", i);
+                }
+                if ((req[i] == 'u') && (arg[j][i].s == 0 || !isDigit(arg[j][i].s[0]))) {
+                    ok = 0;
+                    fprintf(my_stdout, "arg #%d (%s) must be a number.\n", i, arg[j][i].s);
+                }
+            }
+            if (ok) {
+                if (nCmds > 1) {
+                    int mypipe[2];
+                    if (pipe(mypipe)) fprintf (stderr, "Pipe failed.\n");
+
+                    close(mypipe[1]);
+                    my_stdin = fdopen(mypipe[0], "r");
+                    my_stdout = fdopen(mypipe[1], "w");
+
+                    pid[j] = fork();
+                    if (pid[j] == 0) {
+                        (*cmdTable[k].func)(arg[j]);
+                        _exit(0);
+                    } else if (pid[j] < 0) {
+                        fprintf(stderr, "The fork failed for cmd %s", cmdTable[k].cmdName);
+                        _exit(0);
+                    } 
+                } else {
+                    (*cmdTable[k].func)(arg[j]);
+                    return;
+                }
+            }
         }
     }
-    if (ok) (*cmdTable[k].func)(arg);
+    for (uint i = 0; i < nCmds; i++) {
+        if (ok && pid[i] > 0) {
+            if (waitpid(pid[i], &status, 0) != pid[0]) {
+                fprintf(stderr, "waitpid failed for pid %d with status %d", pid[i], status);
+            }
+        }
+        fclose(my_stdout);
+        fclose(my_stdin);
+    }
 }
 
-/* pre:: buf[] is the command line as typed by the user, nMax + 1 ==
+/* pre:: buf[] is the command line as typed by the user, nArgsMax + 1 ==
  * sizeof(types);; post:: Parse the line, and set types[], arg[].s and
  * arg[].u fields.
  */
 
-void setArgsGiven(char *buf, Arg *arg, char *types, uint nMax) {
-    for (uint i = 0; i < nMax; i++) {
-        arg[i].s = 0;
-        types[i] = 0;
+void setArgsGiven(char *buf) {
+    //char *line = strdup(buf);
+    nCmds++;
+    if (nCmds == 1) {
+        strtok(buf, " \t\n");  // terminates the cmd name with a \0
+        cmds[nCmds - 1] = buf;
+    } else {
+        cmds[nCmds - 1] = strtok(0, " \t");
     }
-    types[nMax] = 0;
 
-    strtok(buf, " \t\n");  // terminates the cmd name with a \0
-
-    for (uint i = 0; i < nMax;) {
+    for (uint i = 0; i < nArgsMax;) {
         char *q = strtok(0, " \t");
         if (q == 0 || *q == 0) break;
         if (*q == '>') {
             char *filename = strtok(0, " \t");
-            my_stream = fopen(filename, "w");
+            my_stdout = fopen(filename, "w");
             break;
         }
-        if (*q == '|') puts("piping");
-        arg[i].s = q;
-        arg[i].u = toNum(q);
-        types[i] = isDigit(*q) ? 'u' : 's';
-        nArgs = ++i;
+        if (*q == '|') {
+            setArgsGiven(buf);
+            break;
+        }
+        arg[nCmds - 1][i].s = q;
+        arg[nCmds - 1][i].u = toNum(q);
+        types[nCmds - 1][i] = isDigit(*q) ? 'u' : 's';
+        nArgs[nCmds - 1] = ++i;
     }
 }
 
@@ -290,14 +343,15 @@ void setArgsGiven(char *buf, Arg *arg, char *types, uint nMax) {
  * Find the row number of the (possibly overloaded) cmd given in
  * name[].  Return this number if found; return -1 otherwise. */
 
-int findCmd(char *name, char *argtypes) {
-    for (uint i = 0; i < ncmds; i++) {
-        if (strcmp(name, cmdTable[i].cmdName) == 0 &&
-            strcmp(argtypes, cmdTable[i].argsRequired) == 0) {
-            return i;
+void findCmds() {
+    for (uint j = 0; j < nCmds; j++) {
+        for (uint i = 0; i < ncmds; i++) {
+            if (strcmp(cmds[j], cmdTable[i].cmdName) == 0 &&
+                strcmp(types[j], cmdTable[i].argsRequired) == 0) {
+                invokeTable[j] = i;
+            }
         }
     }
-    return -1;
 }
 
 void ourgets(char *buf) {
@@ -306,28 +360,40 @@ void ourgets(char *buf) {
     if (p) *p = 0;
 }
 
+void resetArgs() {
+    for (uint j = 0; j < nPipesMax; j++) {
+        for (uint i = 0; i < nArgsMax; i++) {
+            arg[j][i].s = 0;
+            types[j][i] = 0;
+        }
+        nArgs[j] = 0;
+        invokeTable[j] = -1;
+        types[j][nArgsMax] = 0;
+    }
+    nCmds = 0;
+}
+
 int main() {
     char buf[1024];  // better not type longer than 1023 chars
-    my_stream = stdout;
+    my_stdout = stdout;
 
     usage();
     for (;;) {
+        resetArgs();
         *buf = 0;                // clear old input
-        my_stream = stdout; // clear redirection
-        fprintf(my_stream, "%s", "sh33% ");  // prompt
+        my_stdout = stdout; // clear redirection
+        my_stdin = stdin;
+        fprintf(my_stdout, "%s", "sh33% ");  // prompt
         ourgets(buf);
-        fprintf(my_stream, "cmd [%s]\n", buf);  // just print out what we got as-is
+        fprintf(my_stdout, "cmd [%s]\n", buf);  // just print out what we got as-is
         if (buf[0] == 0) continue;
         if (buf[0] == '#') continue;  // this is a comment line, do nothing
         if (buf[0] == '!')            // begins with !, execute it as
             system(buf + 1);          // a normal shell cmd
         else {
-            setArgsGiven(buf, arg, types, nArgsMax);
-            int k = findCmd(buf, types);
-            if (k >= 0)
-                invokeCmd(k, arg);
-            else
-                usage();
+            setArgsGiven(buf);
+            findCmds();
+            invokeCmds();
         }
     }
 }

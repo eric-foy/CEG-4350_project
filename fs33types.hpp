@@ -5,6 +5,7 @@
 
 #include <stdio.h>		// not all these are needed every where,
 #include <string.h>		// but we take the simple way out
+#include <sys/wait.h>
 #include <unistd.h>
 #include <stdlib.h>
 #include <fcntl.h>
