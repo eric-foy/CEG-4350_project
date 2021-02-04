@@ -28,7 +28,7 @@ class Arg {
 } arg[nPipesMax][nArgsMax];
 
 int invokeTable[nPipesMax];
-char *cmds[nPipesMax];
+const char *cmds[nPipesMax];
 uint nArgs[nPipesMax];
 uint nCmds;
 
@@ -243,17 +243,20 @@ void usage() {
  * appropriate action. */
 
 void invokeCmds() {
-    pid_t pid[nPipesMax];
-    int status;
-    uint ok = 1;
+    uint ok[nPipesMax];
+    for (uint i = 0; i < nPipesMax; i++) {
+        ok[i] = 1;
+    }
     for (uint j = 0; j < nCmds; j++) {
         int k = invokeTable[j];
-        if (k != -1) {
+        if (k == -1) {
+            ok[j] = 0;
+        } else if (k != -2) {
             if (cmdTable[k].globalsNeeded[0] == 'v' && cwdVNIN == 0) {
-                ok = 0;
+                ok[j] = 0;
                 fprintf(my_stdout, "Cmd %s needs the cfv to be != 0.\n", cmdTable[k].cmdName);
             } else if (cmdTable[k].globalsNeeded[0] == 'm' && mtab == 0) {
-                ok = 0;
+                ok[j] = 0;
                 fprintf(my_stdout, "Cmd %s needs the mtab to be != 0.\n", cmdTable[k].cmdName);
             }
 
@@ -261,46 +264,45 @@ void invokeCmds() {
             uint na = strlen(req);
             for (uint i = 0; i < na; i++) {
                 if (req[i] == 's' && (arg[j][i].s == 0 || arg[j][i].s[0] == 0)) {
-                    ok = 0;
+                    ok[j] = 0;
                     fprintf(my_stdout, "arg #%d must be a non-empty string.\n", i);
                 }
                 if ((req[i] == 'u') && (arg[j][i].s == 0 || !isDigit(arg[j][i].s[0]))) {
-                    ok = 0;
+                    ok[j] = 0;
                     fprintf(my_stdout, "arg #%d (%s) must be a number.\n", i, arg[j][i].s);
-                }
-            }
-            if (ok) {
-                if (nCmds > 1) {
-                    int mypipe[2];
-                    if (pipe(mypipe)) fprintf (stderr, "Pipe failed.\n");
-
-                    close(mypipe[1]);
-                    my_stdin = fdopen(mypipe[0], "r");
-                    my_stdout = fdopen(mypipe[1], "w");
-
-                    pid[j] = fork();
-                    if (pid[j] == 0) {
-                        (*cmdTable[k].func)(arg[j]);
-                        _exit(0);
-                    } else if (pid[j] < 0) {
-                        fprintf(stderr, "The fork failed for cmd %s", cmdTable[k].cmdName);
-                        _exit(0);
-                    } 
-                } else {
-                    (*cmdTable[k].func)(arg[j]);
-                    return;
                 }
             }
         }
     }
-    for (uint i = 0; i < nCmds; i++) {
-        if (ok && pid[i] > 0) {
-            if (waitpid(pid[i], &status, 0) != pid[0]) {
-                fprintf(stderr, "waitpid failed for pid %d with status %d", pid[i], status);
+
+    if (nCmds == 1) {
+        if (invokeTable[0] == -2) {
+            char command[1024];
+            strcpy(command, cmds[0] + 1);
+            for (uint i = 0; i < nArgs[0]; i++) {
+                strcat(command, " ");
+                strcat(command, arg[0][i].s);
             }
+            system(command);
+        } else {
+            if (ok[0]) (*cmdTable[invokeTable[0]].func)(arg[0]);
         }
-        fclose(my_stdout);
-        fclose(my_stdin);
+    } else if (nCmds == 2) {
+        if (invokeTable[1] == -2) {
+            char command[1024];
+            strcpy(command, cmds[1] + 1);
+            for (uint i = 0; i < nArgs[1]; i++) {
+                strcat(command, " ");
+                strcat(command, arg[1][i].s);
+            }
+            my_stdout = popen(command, "w");
+            if (my_stdout && ok[0]) {
+                (*cmdTable[invokeTable[0]].func)(arg[0]);
+            }
+            pclose(my_stdout);
+        }
+    } else if (nCmds > 2) {
+        TODO();
     }
 }
 
@@ -310,7 +312,6 @@ void invokeCmds() {
  */
 
 void setArgsGiven(char *buf) {
-    //char *line = strdup(buf);
     nCmds++;
     if (nCmds == 1) {
         strtok(buf, " \t\n");  // terminates the cmd name with a \0
@@ -345,10 +346,14 @@ void setArgsGiven(char *buf) {
 
 void findCmds() {
     for (uint j = 0; j < nCmds; j++) {
-        for (uint i = 0; i < ncmds; i++) {
-            if (strcmp(cmds[j], cmdTable[i].cmdName) == 0 &&
-                strcmp(types[j], cmdTable[i].argsRequired) == 0) {
-                invokeTable[j] = i;
+        if (cmds[j][0] == '!') {
+            invokeTable[j] = -2;
+        } else {
+            for (uint i = 0; i < ncmds; i++) {
+                if (strcmp(cmds[j], cmdTable[i].cmdName) == 0 &&
+                    strcmp(types[j], cmdTable[i].argsRequired) == 0) {
+                    invokeTable[j] = i;
+                }
             }
         }
     }
@@ -388,8 +393,8 @@ int main() {
         fprintf(my_stdout, "cmd [%s]\n", buf);  // just print out what we got as-is
         if (buf[0] == 0) continue;
         if (buf[0] == '#') continue;  // this is a comment line, do nothing
-        if (buf[0] == '!')            // begins with !, execute it as
-            system(buf + 1);          // a normal shell cmd
+        //if (buf[0] == '!')            // begins with !, execute it as
+        //    system(buf + 1);          // a normal shell cmd
         else {
             setArgsGiven(buf);
             findCmds();
