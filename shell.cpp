@@ -31,6 +31,7 @@ int invokeTable[nPipesMax];
 const char *cmds[nPipesMax];
 uint nArgs[nPipesMax];
 uint nCmds;
+uint bg;
 
 uint TODO() {
     fprintf(my_stdout, "to be done!\n");
@@ -51,6 +52,11 @@ uint isAlphaNumDot(char c) {
 
 int toNum(const char *p) {
     return (p != 0 && '0' <= *p && *p <= '9' ? atoi(p) : 0);
+}
+
+void sigint(int sig) {
+    signal(sig, SIG_IGN);
+    exit(0);
 }
 
 SimDisk *mkSimDisk(byte *name) {
@@ -243,6 +249,7 @@ void usage() {
  * appropriate action. */
 
 void invokeCmds() {
+    pid_t pid = -1;
     uint ok[nPipesMax];
     for (uint i = 0; i < nPipesMax; i++) {
         ok[i] = 1;
@@ -275,6 +282,11 @@ void invokeCmds() {
         }
     }
 
+    if (bg) {
+        pid = fork();
+        if (pid != 0) return;
+    }
+
     if (nCmds == 1) {
         if (invokeTable[0] == -2) {
             char command[1024];
@@ -304,6 +316,8 @@ void invokeCmds() {
     } else if (nCmds > 2) {
         TODO();
     }
+
+    if (pid == 0) _exit(0);
 }
 
 /* pre:: buf[] is the command line as typed by the user, nArgsMax + 1 ==
@@ -327,9 +341,11 @@ void setArgsGiven(char *buf) {
             char *filename = strtok(0, " \t");
             my_stdout = fopen(filename, "w");
             break;
-        }
-        if (*q == '|') {
+        } else if (*q == '|') {
             setArgsGiven(buf);
+            break;
+        } else if (*q == '&') {
+            bg = 1;
             break;
         }
         arg[nCmds - 1][i].s = q;
@@ -381,6 +397,7 @@ void resetArgs() {
 int main() {
     char buf[1024];  // better not type longer than 1023 chars
     my_stdout = stdout;
+    signal(SIGINT, sigint);
 
     usage();
     for (;;) {
@@ -388,13 +405,12 @@ int main() {
         *buf = 0;                // clear old input
         my_stdout = stdout; // clear redirection
         my_stdin = stdin;
+        bg = 0;
         fprintf(my_stdout, "%s", "sh33% ");  // prompt
         ourgets(buf);
         fprintf(my_stdout, "cmd [%s]\n", buf);  // just print out what we got as-is
         if (buf[0] == 0) continue;
         if (buf[0] == '#') continue;  // this is a comment line, do nothing
-        //if (buf[0] == '!')            // begins with !, execute it as
-        //    system(buf + 1);          // a normal shell cmd
         else {
             setArgsGiven(buf);
             findCmds();
