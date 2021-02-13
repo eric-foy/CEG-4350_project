@@ -1,0 +1,904 @@
+Script started on 2021-01-16 02:22:31-05:00 [TERM="rxvt-unicode-256color" TTY="/dev/pts/1" COLUMNS="119" LINES="66"]
+[~/current/CEG-4350.OS_internals/projects/1]bash
+[~/current/CEG-4350.OS_internals/projects/1]exit
+[~/current/CEG-4350.OS_internals/projects/1]cat src/
+bitvector.cpp   file.cpp        inodes.cpp      ReadMe.txt      simdisk.cpp     volume.cpp      
+directory.cpp   fs33types.hpp   Makefile        shell.cpp       typescript      
+diskParams.dat  .gitignore      mount.cpp       shell.cpp~      user.cpp        
+[~/current/CEG-4350.OS_internals/projects/1]cat src/shell.cpp
+/*
+ * shell.C -- CEG433 File Sys Project shell
+ * pmateti@wright.edu
+ */
+
+#include "fs33types.hpp"
+
+extern MountEntry *mtab;
+extern VNIN cwdVNIN;
+FileVolume * fv;
+Directory * wd;
+
+#define nArgsMax 10
+char types[1+nArgsMax];		// +1 for \0
+
+/* An Arg-ument for one of our commands is either a "word" (a null
+ * terminated string), or an unsigned integer.  We store both
+ * representations of the argument. */
+
+class Arg {
+public:
+  char *s;
+  uint u;
+} arg[nArgsMax];
+
+uint nArgs = 0;
+
+uint TODO()
+{
+  printf("to be done!\n");
+  return 0;
+}
+
+uint TODO(char *p)
+{
+  printf("%s to be done!\n", p);
+  return 0;
+}
+
+uint isDigit(char c)
+{
+  return '0' <= c && c <= '9';
+}
+
+uint isAlphaNumDot(char c)
+{
+  return c == '.' || 'a' <= c && c <= 'z'
+      || 'A' <= c && c <= 'Z' || '0' <= c && c <= '9';
+}
+
+int toNum(const char *p)
+{
+  return (p != 0 && '0' <= *p && *p <= '9' ? atoi(p) : 0);
+}
+
+SimDisk * mkSimDisk(byte *name)
+{
+  SimDisk * simDisk = new SimDisk(name, 0);
+  if (simDisk->nSectorsPerDisk == 0) {
+    printf("Failed to find/create simDisk named %s\n", name);
+    delete simDisk;
+    simDisk = 0;
+  }
+  return simDisk;
+}
+
+void doMakeDisk(Arg * a)
+{
+  SimDisk * simDisk = mkSimDisk((byte *) a[0].s);
+  if (simDisk == 0)
+    return;
+  printf("new SimDisk(%s) = %p, nSectorsPerDisk=%d,"
+	 "nBytesPerSector=%d, simDiskNum=%d)\n",
+	 simDisk->name, (void*) simDisk, simDisk->nSectorsPerDisk,
+	 simDisk->nBytesPerSector, simDisk->simDiskNum);
+  delete simDisk;
+}
+
+void doWriteDisk(Arg * a)
+{
+  SimDisk * simDisk = mkSimDisk((byte *) a[0].s);
+  if (simDisk == 0)
+    return;
+  char *st = a[2].s;		// arbitrary word
+  if (st == 0)			// if it is NULL, we use ...
+    st = "CEG433/633/Mateti";
+  char buf[1024];		// assuming nBytesPerSectorMAX < 1024
+  for (uint m = strlen(st), n = 0; n < 1024 - m; n += m)
+    memcpy(buf + n, st, m);	// fill with several copies of st
+  uint r = simDisk->writeSector(a[1].u, (byte *) buf);
+  printf("write433disk(%d, %s...) == %d to Disk %s\n", a[1].u, st, r, a[0].s);
+  delete simDisk;
+}
+
+void doReadDisk(Arg * a)
+{
+  SimDisk * simDisk = mkSimDisk((byte *) a[0].s);
+  if (simDisk == 0)
+    return;
+  char buf[1024];		// assuming nBytesPerSectorMAX < 1024
+  uint r = simDisk->readSector(a[1].u, (byte *) buf);
+  buf[10] = 0;			// sentinel
+  printf("read433disk(%d, %s...) = %d from Disk %s\n", a[1].u, buf, r, a[0].s);
+  delete simDisk;
+}
+
+void doQuit(Arg * a)
+{
+  exit(0);
+}
+
+void doEcho(Arg * a)
+{
+  printf("%s#%d, %s#%d, %s#%d, %s#%d\n", a[0].s, a[0].u,
+	 a[1].s, a[1].u, a[2].s, a[2].u, a[3].s, a[3].u);
+}
+
+void doMakeFV(Arg * a)
+{
+  SimDisk * simDisk = mkSimDisk((byte *) a[0].s);
+  if (simDisk == 0)
+    return;
+  fv = simDisk->make33fv();
+  printf("make33fv() = %p, Name == %s, Disk# == %d\n",
+	 (void*) fv, a[0].s, simDisk->simDiskNum);
+
+  if (fv) {
+      wd = new Directory(fv, 1, 0);
+      cwdVNIN = mkVNIN(simDisk->simDiskNum, 1);
+  }
+}
+
+void doCopyTo(byte* from, byte* to)
+{
+  uint r = fv->write33file(to, from);
+  printf("write33file(%s, %s) == %d\n", to, from, r);
+}
+
+void doCopyFrom(byte* from, byte* to)
+{
+  uint r = fv->read33file(to, from);
+  printf("read33file(%s, %s) == %d\n", to, from, r);
+}
+
+void doCopy33(byte* from, byte* to)
+{
+  uint r = fv->copy33file(to, from);
+  printf("copy33file(%s, %s) == %d\n", to, from, r);
+}
+
+void doCopy(Arg * a)
+{
+  byte* to = (byte *) a[0].s;
+  byte* from = (byte *) a[1].s;
+
+  if (a[0].s[0] == '@' && a[1].s[0] != '@') {
+    doCopyTo(from, (to + 1));
+  }
+  else if (a[0].s[0] != '@' && a[1].s[0] == '@') {
+    doCopyFrom((from + 1), to);
+  }
+  else if (a[0].s[0] != '@' && a[1].s[0] != '@') {
+    doCopy33(from, to);
+  }
+  else {
+    puts("Wrong arguments to cp.");
+  }
+}
+
+void doLsLong(Arg * a)
+{
+  printf("\nDirectory listing for disk %s, cwdVNIN == 0x%0lx begins:\n",
+	 wd->fv->simDisk->name, (ulong) cwdVNIN);
+  wd->ls();                     // Suspicious!
+  printf("Directory listing ends.\n");
+}
+
+void doRm(Arg * a)
+{
+  uint in = wd->fv->deleteFile((byte *) a[0].s);
+  printf("rm %s returns %d.\n", a[0].s, in);
+}
+
+void doInode(Arg * a)
+{
+  uint ni = a[0].u;
+
+  wd->fv->inodes.show(ni);
+}
+
+void doMkDir(Arg * a)
+{
+  TODO("doMkDir");
+}
+
+void doChDir(Arg * a)
+{
+  TODO("doChDir");
+}
+
+void doPwd(Arg * a)
+{
+  TODO("doPwd");
+}
+
+void doMv(Arg * a)
+{
+  TODO("doMv");
+}
+
+void doMountDF(Arg * a)		// arg a ignored
+{
+  TODO("doMountDF");
+}
+
+void doMountUS(Arg * a)
+{
+  TODO("doMountUS");
+}
+
+void doUmount(Arg * a)
+{
+  TODO("doUmount");
+}
+
+/* The following describes one entry in our table of commands.  For
+ * each cmmdName (a null terminated string), we specify the arguments
+ * it requires by a sequence of letters.  The letter s stands for
+ * "that argument should be a string", the letter u stands for "that
+ * argument should be an unsigned int."  The data member (func) is a
+ * pointer to the function in our code that implements that command.
+ * globalsNeeded identifies whether we need a volume ("v"), a simdisk
+ * ("d"), or a mount table ("m").  See invokeCmd() below for exact
+ * details of how all these flags are interpreted.
+ */
+
+class CmdTable {
+public:
+  char *cmdName;
+  char *argsRequired;
+  char *globalsNeeded;		// need d==simDisk, v==cfv, m=mtab
+  void (*func) (Arg * a);
+} cmdTable[] = {
+  {"cd", "s", "v", doChDir},
+  {"cp", "ss", "v", doCopy},
+  {"echo", "ssss", "", doEcho},
+  {"inode", "u", "v", doInode},
+  {"ls", "", "v", doLsLong},
+  {"lslong", "", "v", doLsLong},
+  {"mkdir", "s", "v", doMkDir},
+  {"mkdisk", "s", "", doMakeDisk},
+  {"mkfs", "s", "", doMakeFV},
+  {"mount", "us","", doMountUS},
+  {"mount", "", "", doMountDF},
+  {"mv", "ss", "v", doMv},
+  {"rddisk", "su", "", doReadDisk},
+  {"rmdir", "s", "v", doRm},
+  {"rm", "s", "v", doRm},
+  {"pwd", "", "v", doPwd},
+  {"q", "", "", doQuit},
+  {"quit", "", "", doQuit},
+  {"umount", "u", "m", doUmount},
+  {"wrdisk", "sus", "", doWriteDisk}
+};
+
+uint ncmds = sizeof(cmdTable) / sizeof(CmdTable);
+
+void usage()
+{
+  printf("The shell has only the following cmds:\n");
+  for (uint i = 0; i < ncmds; i++)
+    printf("\t%s\t%s\n", cmdTable[i].cmdName, cmdTable[i].argsRequired);
+  printf("Start with ! to invoke a Unix shell cmd\n");
+}
+
+/* pre:: k >= 0, arg[] are set already;; post:: Check that args are
+ * ok, and the needed simDisk or cfv exists before invoking the
+ * appropriate action. */
+
+void invokeCmd(int k, Arg *arg)
+{
+  uint ok = 1;
+  if (cmdTable[k].globalsNeeded[0] == 'v' && cwdVNIN == 0) {
+    ok = 0;
+    printf("Cmd %s needs the cfv to be != 0.\n", cmdTable[k].cmdName);
+  }
+  else if (cmdTable[k].globalsNeeded[0] == 'm' && mtab == 0) {
+    ok = 0;
+    printf("Cmd %s needs the mtab to be != 0.\n", cmdTable[k].cmdName);
+  }
+
+  char *req = cmdTable[k].argsRequired;
+  uint na = strlen(req);
+  for (uint i = 0; i < na; i++) {
+    if (req[i] == 's' && (arg[i].s == 0 || arg[i].s[0] == 0)) {
+      ok = 0;
+      printf("arg #%d must be a non-empty string.\n", i);
+    }
+    if ((req[i] == 'u') && (arg[i].s == 0 || !isDigit(arg[i].s[0]))) {
+	ok = 0;
+	printf("arg #%d (%s) must be a number.\n", i, arg[i].s);
+    }
+  }
+  if (ok)
+    (*cmdTable[k].func) (arg);
+}
+
+/* pre:: buf[] is the command line as typed by the user, nMax + 1 ==
+ * sizeof(types);; post:: Parse the line, and set types[], arg[].s and
+ * arg[].u fields.
+ */
+
+void setArgsGiven(char *buf, Arg *arg, char *types, uint nMax)
+{
+  for (uint i = 0; i < nMax; i++) {
+    arg[i].s = 0;
+    types[i] = 0;
+  }
+  types[nMax] = 0;
+
+  strtok(buf, " \t\n");		// terminates the cmd name with a \0
+
+  for (uint i = 0; i < nMax;) {
+      char *q = strtok(0, " \t");
+      if (q == 0 || *q == 0) break;
+      arg[i].s = q;
+      arg[i].u = toNum(q);
+      types[i] = isDigit(*q)? 'u' : 's';
+      nArgs = ++i;
+  }
+}
+
+/* pre:: name pts to the command token, argtypes[] is a string of
+ * 's'/'u' indicating the types of arguments the user gave;; post::
+ * Find the row number of the (possibly overloaded) cmd given in
+ * name[].  Return this number if found; return -1 otherwise. */
+
+int findCmd(char *name, char *argtypes)
+{
+  for (uint i = 0; i < ncmds; i++) {
+    if (strcmp(name, cmdTable[i].cmdName) == 0
+	&& strcmp(argtypes, cmdTable[i].argsRequired) == 0) {
+      return i;
+    }
+  }
+  return -1;
+}
+
+void ourgets(char *buf) {
+  fgets(buf, 1024, stdin);
+  char * p = index(buf, '\n');
+  if (p) *p = 0;
+}
+
+int main()
+{
+  char buf[1024];		// better not type longer than 1023 chars
+
+  usage();
+  for (;;) {
+    *buf = 0;			// clear old input
+    printf("%s", "sh33% ");	// prompt
+    ourgets(buf);
+    printf("cmd [%s]\n", buf);	// just print out what we got as-is
+    if (buf[0] == 0)
+      continue;
+    if (buf[0] == '#')
+      continue;			// this is a comment line, do nothing
+    if (buf[0] == '!')		// begins with !, execute it as
+      system(buf + 1);		// a normal shell cmd
+    else {
+      setArgsGiven(buf, arg, types, nArgsMax);
+      int k = findCmd(buf, types);
+      if (k >= 0)
+	invokeCmd(k, arg);
+      else
+	usage();
+    }
+  }
+}
+
+// -eof-
+
+[~/current/CEG-4350.OS_internals/projects/1]touch a
+[~/current/CEG-4350.OS_internals/projects/1]chmod +x a
+[~/current/CEG-4350.OS_internals/projects/1]rm a
+[~/current/CEG-4350.OS_internals/projects/1]touch b
+[~/current/CEG-4350.OS_internals/projects/1]chown cambion.cambion b
+[~/current/CEG-4350.OS_internals/projects/1]rm b
+[~/current/CEG-4350.OS_internals/projects/1]echo abccc > a
+[~/current/CEG-4350.OS_internals/projects/1]echo abbcc > b
+[~/current/CEG-4350.OS_internals/projects/1]cmd a b
+bash: cmd: command not found
+[~/current/CEG-4350.OS_internals/projects/1]cmp a b
+a b differ: byte 3, line 1
+[~/current/CEG-4350.OS_internals/projects/1]rm a b
+[~/current/CEG-4350.OS_internals/projects/1]df
+Filesystem     1K-blocks      Used Available Use% Mounted on
+/dev/root      180604572 104340124  67020596  61% /
+devtmpfs         1975740         0   1975740   0% /dev
+tmpfs            1977964      7924   1970040   1% /run
+/dev/sda1          95054     23485     64401  27% /boot
+/dev/sda3       41022688  34239552   4669600  88% /usr/src
+/dev/sdb1      306615568 293790352         0 100% /mnt/external
+[~/current/CEG-4350.OS_internals/projects/1]du -hS
+104K	./src
+108K	.
+[~/current/CEG-4350.OS_internals/projects/1]top
+[1]+  Stopped                 top
+[~/current/CEG-4350.OS_internals/projects/1]bg
+[1]+ top &
+>[~/current/CEG-4350.OS_internals/projects/1]killall top
+
+[1]+  Stopped                 top
+[~/current/CEG-4350.OS_internals/projects/1]top
+[~/current/CEG-4350.OS_internals/projects/1]fg
+[~/current/CEG-4350.OS_internals/projects/1]grep include src/file.cpp 
+#include "fs33types.hpp"
+[~/current/CEG-4350.OS_internals/projects/1]ls -R
+.:
+80833089.pdf  cmdsTried.txt  source.tar.bz2  src  stdTestScriptP1.txt
+
+./src:
+bitvector.cpp  diskParams.dat  fs33types.hpp  Makefile   ReadMe.txt  shell.cpp~   typescript  volume.cpp
+directory.cpp  file.cpp        inodes.cpp     mount.cpp  shell.cpp   simdisk.cpp  user.cpp
+[~/current/CEG-4350.OS_internals/projects/1]man nohup
+=NOHUP(1)                                            User Commands                                           NOHUP(1)
+
+NAME
+       nohup - run a command immune to hangups, with output to a non-tty
+
+SYNOPSIS
+       nohup COMMAND [ARG]...
+       nohup OPTION
+
+DESCRIPTION
+       Run COMMAND, ignoring hangup signals.
+
+       --help display this help and exit
+
+       --version
+              output version information and exit
+
+       If  standard input is a terminal, redirect it from an unreadable file.  If standard output is a terminal, ap‐
+       pend output to 'nohup.out' if possible, '$HOME/nohup.out' otherwise.  If standard error is a terminal,  redi‐
+       rect it to standard output.  To save output to FILE, use 'nohup COMMAND > FILE'.
+
+       NOTE:  your  shell  may  have  its own version of nohup, which usually supersedes the version described here.
+       Please refer to your shell's documentation for details about the options it supports.
+
+AUTHOR
+       Written by Jim Meyering.
+
+REPORTING BUGS
+       GNU coreutils online help: <https://www.gnu.org/software/coreutils/>
+       Report any translation bugs to <https://translationproject.org/team/>
+
+COPYRIGHT
+       Copyright  ©  2020  Free  Software  Foundation,  Inc.   License  GPLv3+:  GNU  GPL   version   3   or   later
+       <https://gnu.org/licenses/gpl.html>.
+       This  is free software: you are free to change and redistribute it.  There is NO WARRANTY, to the extent per‐
+       mitted by law.
+
+SEE ALSO
+       Full documentation <https://www.gnu.org/software/coreutils/nohup>
+       or available locally via: info '(coreutils) nohup invocation'
+
+GNU coreutils 8.32                                   March 2020                                             NOHUP(1)
+ Manual page nohup(1) byte 1953/1953 (END) (press h for help or q to quit)
+real	0m5.004s
+user	0m0.000s
+sys	0m0.004s
+[~/current/CEG-4350.OS_internals/projects/1]nohup sleep 100nohup: ignoring input and appending output to 'nohup.out'
+killallls
+^C
+[~/current/CEG-4350.OS_internals/projects/1]nohup sleep 10 &
+[2] 12149
+[~/current/CEG-4350.OS_internals/projects/1]nohup: ignoring input and appending output to 'nohup.out'
+killall sleep
+[2]-  Terminated              nohup sleep 100
+[~/current/CEG-4350.OS_internals/projects/1]echo wtf what is nohup
+wtf what is nohup
+[~/current/CEG-4350.OS_internals/projects/1]od -x src/
+bitvector.cpp   file.cpp        inodes.cpp      ReadMe.txt      simdisk.cpp     volume.cpp      
+directory.cpp   fs33types.hpp   Makefile        shell.cpp       typescript      
+diskParams.dat  .gitignore      mount.cpp       shell.cpp~      user.cpp        
+[~/current/CEG-4350.OS_internals/projects/1]od -x src/bitvector.cpp 
+0000000 2a2f 200a 202a 6962 5674 6365 6f74 2e72
+0000020 0a43 2a20 7020 616d 6574 6974 7740 6972
+0000040 6867 2e74 6465 0a75 2a20 0a2f 230a 6e69
+0000060 6c63 6475 2065 6622 3373 7433 7079 7365
+0000100 682e 7070 0a22 2f0a 202a 7270 3a65 203a
+0000120 626e 7469 2073 203e 3b30 203b 6f70 7473
+0000140 3a3a 4320 6e6f 7473 7572 7463 6620 7662
+0000160 5d5b 202c 6e61 2064 6e69 7469 6169 696c
+0000200 657a 6920 2074 6f74 6120 6c6c 200a 202a
+0000220 7331 202e 6c41 6f73 202c 7277 7469 2065
+0000240 6874 2065 6962 2074 6576 7463 726f 7420
+0000260 206f 6964 6b73 202e 6552 7574 6e72 7420
+0000300 6568 6e20 6d75 6562 2072 666f 6220 6f6c
+0000320 6b63 0a73 2a20 6f20 6363 7075 6569 2e64
+0000340 2a20 0a2f 750a 6e69 2074 6942 5674 6365
+0000360 6f74 3a72 633a 6572 7461 2865 6946 656c
+0000400 6f56 756c 656d 2a20 7020 7666 202c 6975
+0000420 746e 6e20 6962 7374 202c 6975 746e 6e20
+0000440 6c62 636f 626b 6765 6e69 0a29 0a7b 2020
+0000460 7666 3d20 7020 7666 0a3b 2020 6975 746e
+0000500 6220 7a73 3d20 6620 2d76 733e 7075 7265
+0000520 6c42 636f 2e6b 426e 7479 7365 6550 4272
+0000540 6f6c 6b63 0a3b 2020 6962 5674 6365 6f74
+0000560 2072 203d 656e 2077 7962 6574 625b 7a73
+0000600 3b5d 200a 6920 2066 6228 7469 6556 7463
+0000620 726f 3d20 203d 2930 200a 2020 7220 7465
+0000640 7275 206e 3b30 0909 2f09 202f 6f63 6c75
+0000660 2064 6f6e 2074 6567 2074 656d 206d 6f66
+0000700 2072 6962 5674 6365 6f74 0a72 200a 6e20
+0000720 6942 7374 3d20 6e20 6962 7374 0a3b 2020
+0000740 426e 6f6c 6b63 6542 6967 206e 203d 626e
+0000760 6f6c 6b63 6562 6967 3b6e 0a0a 2020 6975
+0001000 746e 6e20 7962 6574 2073 203d 6e28 6962
+0001020 7374 2b20 3720 2029 202f 3b38 2f20 202f
+0001040 6f73 6d20 6e61 2079 7962 6574 0a73 2020
+0001060 6975 746e 6e20 6c42 636f 736b 6f4c 676e
+0001100 3d20 2820 626e 7479 7365 2b20 6220 7a73
+0001120 2d20 3120 2029 202f 7362 3b7a 200a 6d20
+0001140 6d65 6573 2874 6962 5674 6365 6f74 2c72
+0001160 3020 4678 2c46 6220 7a73 3b29 2f09 202f
+0001200 6573 2074 6c61 206c 6962 7374 7420 206f
+0001220 7266 6565 202c 2e69 2e65 202c 0a31 2020
+0001240 2f2f 7720 6972 6574 7420 6568 6220 7469
+0001260 762d 6365 6f74 2072 6f74 6420 7369 0a6b
+0001300 2020 6f66 2072 7528 6e69 2074 2069 203d
+0001320 3b31 6920 3c20 6e20 6c42 636f 736b 6f4c
+0001340 676e 203b 2b69 292b 200a 2020 6620 2d76
+0001360 773e 6972 6574 6c42 636f 286b 426e 6f6c
+0001400 6b63 6542 6967 206e 202b 2c69 6220 7469
+0001420 6556 7463 726f 3b29 200a 6220 7469 6556
+0001440 7463 726f 305b 205d 203d 7830 4637 093b
+0001460 2f09 202f 2d30 6874 6220 7469 6d20 7261
+0001500 656b 2064 7361 6920 2d6e 7375 0a65 2020
+0001520 7666 3e2d 7277 7469 4265 6f6c 6b63 6e28
+0001540 6c42 636f 426b 6765 6e69 202c 6962 5674
+0001560 6365 6f74 2972 0a3b 200a 2f20 202f 616d
+0001600 6b72 7420 6568 2a20 6c62 636f 736b 202a
+0001620 7375 6465 6220 2079 6874 2065 6962 2d74
+0001640 6576 7463 726f 6120 2073 6f6e 2074 7266
+0001660 6565 200a 6620 726f 2820 6975 746e 6220
+0001700 206e 203d 426e 6f6c 6b63 6542 6967 206e
+0001720 202b 426e 6f6c 6b63 4c73 6e6f 2067 202d
+0001740 3b31 6220 206e 3d3e 6e20 6c42 636f 426b
+0001760 6765 6e69 203b 6e62 2d2d 0a29 2020 2020
+0002000 7666 3e2d 6266 4276 6f6c 6b63 2e73 6573
+0002020 4274 7469 6228 2c6e 3020 3b29 200a 7220
+0002040 7465 7275 206e 426e 6f6c 6b63 4c73 6e6f
+0002060 3b67 7d0a 0a0a 6975 746e 4220 7469 6556
+0002100 7463 726f 3a3a 6572 7243 6165 6574 4628
+0002120 6c69 5665 6c6f 6d75 2065 202a 6670 2c76
+0002140 7520 6e69 2074 626e 7469 2c73 7520 6e69
+0002160 2074 626e 6f6c 6b63 6562 6967 296e 7b0a
+0002200 200a 6620 2076 203d 6670 3b76 200a 7520
+0002220 6e69 2074 7362 207a 203d 7666 3e2d 7573
+0002240 6570 4272 6f6c 6b63 6e2e 7942 6574 5073
+0002260 7265 6c42 636f 3b6b 200a 6220 7469 6556
+0002300 7463 726f 3d20 6e20 7765 6220 7479 5b65
+0002320 7362 5d7a 0a3b 2020 6669 2820 6962 5674
+0002340 6365 6f74 2072 3d3d 3020 0a29 2020 2020
+0002360 6572 7574 6e72 3020 093b 0909 2f2f 6320
+0002400 756f 646c 6e20 746f 6720 7465 6d20 6d65
+0002420 6620 726f 6220 7469 6556 7463 726f 0a0a
+0002440 2020 426e 7469 2073 203d 626e 7469 3b73
+0002460 200a 6e20 6c42 636f 426b 6765 6e69 3d20
+0002500 6e20 6c62 636f 626b 6765 6e69 0a3b 2020
+0002520 6975 746e 6e20 7962 6574 2073 203d 6e28
+0002540 6962 7374 2b20 3720 2029 202f 3b38 2f09
+0002560 202f 6f73 6d20 6e61 2079 7962 6574 0a73
+0002600 2020 6572 7574 6e72 2820 626e 7479 7365
+0002620 2b20 6220 7a73 2d20 3120 2029 202f 7362
+0002640 3b7a 7d0a 0a0a 2a2f 7020 6572 3a3a 6e20
+0002660 6e6f 3b65 203b 6f70 7473 3a3a 7220 7465
+0002700 7275 206e 7266 6565 6942 5b74 5d78 202e
+0002720 2f2a 0a0a 6975 746e 4220 7469 6556 7463
+0002740 726f 3a3a 6567 4274 7469 7528 6e69 2074
+0002760 2978 7b0a 200a 6920 2066 7828 3e20 6e20
+0003000 6942 7374 0a29 2020 2020 6572 7574 6e72
+0003020 3020 093b 0909 2f2f 6920 6c6c 6765 6c61
+0003040 7620 6c61 6575 0a0a 2020 6975 746e 6220
+0003060 7a73 3d20 6620 2d76 733e 7075 7265 6c42
+0003100 636f 2e6b 426e 7479 7365 6550 4272 6f6c
+0003120 6b63 0a3b 2020 6975 746e 7820 7962 6574
+0003140 3d20 7820 2f20 3820 093b 2f09 202f 6962
+0003160 2074 6e69 6564 2078 6f63 766e 7265 6574
+0003200 2064 6f74 6220 7479 2065 6e69 6564 0a78
+0003220 2020 6975 746e 7820 6c62 636f 206b 203d
+0003240 6278 7479 2065 202f 7362 3b7a 2f09 202f
+0003260 6f63 766e 7265 6574 2064 6f74 6220 6f6c
+0003300 6b63 6920 646e 7865 200a 6620 2d76 723e
+0003320 6165 4264 6f6c 6b63 6e28 6c42 636f 426b
+0003340 6765 6e69 2b20 7820 6c62 636f 2c6b 6220
+0003360 7469 6556 7463 726f 3b29 0a0a 2020 6975
+0003400 746e 6220 3d20 6220 7469 6556 7463 726f
+0003420 785b 7962 6574 2520 6220 7a73 3b5d 2f09
+0003440 202f 756f 2072 656e 6465 6465 6220 7469
+0003460 6920 2073 6e69 6220 200a 7520 6e69 2074
+0003500 2066 203d 2078 2025 3b38 0909 2f2f 6220
+0003520 7469 6620 6f20 2066 2062 7369 7720 6e61
+0003540 6574 0a64 2020 2062 3e3e 203d 2037 202d
+0003560 3b66 0909 2f09 202f 6972 6867 2074 6873
+0003600 6669 2074 2062 7962 2820 2d37 2966 7020
+0003620 736f 7469 6f69 736e 200a 7220 7465 7275
+0003640 206e 2062 2026 3b31 0909 2f09 202f 6572
+0003660 7574 6e72 7420 6568 6c20 7361 2074 6962
+0003700 0a74 0a7d 2f0a 202a 7270 3a65 203a 3d76
+0003720 303d 202c 726f 3120 3b3b 7020 736f 3a74
+0003740 203a 7266 6565 6942 5b74 5d78 3a20 203d
+0003760 2c76 6120 646e 7720 6972 6574 6920 2074
+0004000 6f74 7420 6568 200a 202a 6964 6b73 3b3b
+0004020 2a20 0a2f 760a 696f 2064 6942 5674 6365
+0004040 6f74 3a72 733a 7465 6942 2874 6975 746e
+0004060 7820 202c 6975 746e 7620 0a29 0a7b 2020
+0004100 6669 2820 2078 203e 426e 7469 2973 200a
+0004120 2020 7220 7465 7275 3b6e 0909 2f09 202f
+0004140 6c69 656c 6167 206c 6176 756c 0a65 200a
+0004160 7520 6e69 2074 7362 207a 203d 7666 3e2d
+0004200 7573 6570 4272 6f6c 6b63 6e2e 7942 6574
+0004220 5073 7265 6c42 636f 3b6b 200a 7520 6e69
+0004240 2074 6278 7479 2065 203d 2078 202f 3b38
+0004260 0909 2f2f 6220 7469 6920 646e 7865 6320
+0004300 6e6f 6576 7472 6465 7420 206f 7962 6574
+0004320 6920 646e 7865 200a 7520 6e69 2074 6278
+0004340 6f6c 6b63 3d20 7820 7962 6574 2f20 6220
+0004360 7a73 093b 2f2f 6320 6e6f 6576 7472 6465
+0004400 7420 206f 6c62 636f 206b 6e69 6564 0a78
+0004420 2020 7666 3e2d 6572 6461 6c42 636f 286b
+0004440 426e 6f6c 6b63 6542 6967 206e 202b 6278
+0004460 6f6c 6b63 202c 6962 5674 6365 6f74 2972
+0004500 0a3b 200a 7520 6e69 2074 2066 203d 2078
+0004520 2025 3b38 200a 7520 6e69 2074 206d 203d
+0004540 2031 3c3c 2820 2037 202d 2966 093b 2f2f
+0004560 3020 2e30 2e2e 3130 2e30 2e2e 2c30 6220
+0004600 7469 3120 6920 206e 6874 2065 2d66 6874
+0004620 7020 736f 7469 6f69 0a6e 2020 6975 746e
+0004640 6220 3d20 6220 7469 6556 7463 726f 785b
+0004660 7962 6574 2520 6220 7a73 3b5d 200a 6220
+0004700 7469 6556 7463 726f 785b 7962 6574 2520
+0004720 6220 7a73 205d 203d 7628 2120 203d 2030
+0004740 203f 2062 207c 206d 203a 2062 2026 6d7e
+0004760 3b29 200a 6620 2d76 773e 6972 6574 6c42
+0005000 636f 286b 426e 6f6c 6b63 6542 6967 206e
+0005020 202b 6278 6f6c 6b63 202c 6962 5674 6365
+0005040 6f74 2972 0a3b 0a7d 2f0a 202a 7270 3a65
+0005060 203a 6f6e 656e 3b20 203b 6f70 7473 3a3a
+0005100 5220 7465 7275 206e 6874 2065 756e 626d
+0005120 7265 6920 3e20 3020 6f20 2066 2061 7266
+0005140 6565 6220 7469 202c 6669 200a 202a 7661
+0005160 6961 616c 6c62 2065 2e69 2e65 202c 7266
+0005200 6565 6942 5b74 5d69 3d20 203d 2031 6e61
+0005220 2064 6573 2074 6874 2065 6962 2074 6f74
+0005240 3020 202c 0a30 2a20 6f20 6874 7265 6977
+0005260 6573 202e 2f2a 0a0a 6975 746e 4220 7469
+0005300 6556 7463 726f 3a3a 6567 4674 6572 4265
+0005320 7469 2928 7b0a 200a 6620 726f 2820 6975
+0005340 746e 6920 3d20 3120 203b 2069 203c 426e
+0005360 7469 3b73 6920 2b2b 0a29 2020 2020 6669
+0005400 2820 6567 4274 7469 6928 2029 3d3d 3120
+0005420 2029 0a7b 2020 2020 2020 6573 4274 7469
+0005440 6928 202c 2930 0a3b 2020 2020 2020 6572
+0005460 7574 6e72 6920 0a3b 2020 2020 0a7d 2020
+0005500 6572 7574 6e72 3020 0a3b 0a7d 2f0a 202f
+0005520 652d 666f 0a2d
+0005526
+[~/current/CEG-4350.OS_internals/projects/1]xxd src/
+bitvector.cpp   file.cpp        inodes.cpp      ReadMe.txt      simdisk.cpp     volume.cpp      
+directory.cpp   fs33types.hpp   Makefile        shell.cpp       typescript      
+diskParams.dat  .gitignore      mount.cpp       shell.cpp~      user.cpp        
+[~/current/CEG-4350.OS_internals/projects/1]xxd src/B
+bitvector.cpp 
+00000000: 2f2a 0a20 2a20 6269 7456 6563 746f 722e  /*. * bitVector.
+00000010: 430a 202a 2070 6d61 7465 7469 4077 7269  C. * pmateti@wri
+00000020: 6768 742e 6564 750a 202a 2f0a 0a23 696e  ght.edu. */..#in
+00000030: 636c 7564 6520 2266 7333 3374 7970 6573  clude "fs33types
+00000040: 2e68 7070 220a 0a2f 2a20 7072 653a 3a20  .hpp"../* pre:: 
+00000050: 6e62 6974 7320 3e20 303b 3b20 706f 7374  nbits > 0;; post
+00000060: 3a3a 2043 6f6e 7374 7275 6374 2066 6276  :: Construct fbv
+00000070: 5b5d 2c20 616e 6420 696e 6974 6961 6c69  [], and initiali
+00000080: 7a65 2069 7420 746f 2061 6c6c 0a20 2a20  ze it to all. * 
+00000090: 3173 2e20 416c 736f 2c20 7772 6974 6520  1s. Also, write 
+000000a0: 7468 6520 6269 7420 7665 6374 6f72 2074  the bit vector t
+000000b0: 6f20 6469 736b 2e20 5265 7475 726e 2074  o disk. Return t
+000000c0: 6865 206e 756d 6265 7220 6f66 2062 6c6f  he number of blo
+000000d0: 636b 730a 202a 206f 6363 7570 6965 642e  cks. * occupied.
+000000e0: 202a 2f0a 0a75 696e 7420 4269 7456 6563   */..uint BitVec
+000000f0: 746f 723a 3a63 7265 6174 6528 4669 6c65  tor::create(File
+00000100: 566f 6c75 6d65 202a 2070 6676 2c20 7569  Volume * pfv, ui
+00000110: 6e74 206e 6269 7473 2c20 7569 6e74 206e  nt nbits, uint n
+00000120: 626c 6f63 6b62 6567 696e 290a 7b0a 2020  blockbegin).{.  
+00000130: 6676 203d 2070 6676 3b0a 2020 7569 6e74  fv = pfv;.  uint
+00000140: 2062 737a 203d 2066 762d 3e73 7570 6572   bsz = fv->super
+00000150: 426c 6f63 6b2e 6e42 7974 6573 5065 7242  Block.nBytesPerB
+00000160: 6c6f 636b 3b0a 2020 6269 7456 6563 746f  lock;.  bitVecto
+00000170: 7220 3d20 6e65 7720 6279 7465 5b62 737a  r = new byte[bsz
+00000180: 5d3b 0a20 2069 6620 2862 6974 5665 6374  ];.  if (bitVect
+00000190: 6f72 203d 3d20 3029 0a20 2020 2072 6574  or == 0).    ret
+000001a0: 7572 6e20 303b 0909 092f 2f20 636f 756c  urn 0;...// coul
+000001b0: 6420 6e6f 7420 6765 7420 6d65 6d20 666f  d not get mem fo
+000001c0: 7220 6269 7456 6563 746f 720a 0a20 206e  r bitVector..  n
+000001d0: 4269 7473 203d 206e 6269 7473 3b0a 2020  Bits = nbits;.  
+000001e0: 6e42 6c6f 636b 4265 6769 6e20 3d20 6e62  nBlockBegin = nb
+000001f0: 6c6f 636b 6265 6769 6e3b 0a0a 2020 7569  lockbegin;..  ui
+00000200: 6e74 206e 6279 7465 7320 3d20 286e 6269  nt nbytes = (nbi
+00000210: 7473 202b 2037 2920 2f20 383b 202f 2f20  ts + 7) / 8; // 
+00000220: 736f 206d 616e 7920 6279 7465 730a 2020  so many bytes.  
+00000230: 7569 6e74 206e 426c 6f63 6b73 4c6f 6e67  uint nBlocksLong
+00000240: 203d 2028 6e62 7974 6573 202b 2062 737a   = (nbytes + bsz
+00000250: 202d 2031 2920 2f20 6273 7a3b 0a20 206d   - 1) / bsz;.  m
+00000260: 656d 7365 7428 6269 7456 6563 746f 722c  emset(bitVector,
+00000270: 2030 7846 462c 2062 737a 293b 092f 2f20   0xFF, bsz);.// 
+00000280: 7365 7420 616c 6c20 6269 7473 2074 6f20  set all bits to 
+00000290: 6672 6565 2c20 692e 652e 2c20 310a 2020  free, i.e., 1.  
+000002a0: 2f2f 2077 7269 7465 2074 6865 2062 6974  // write the bit
+000002b0: 2d76 6563 746f 7220 746f 2064 6973 6b0a  -vector to disk.
+000002c0: 2020 666f 7220 2875 696e 7420 6920 3d20    for (uint i = 
+000002d0: 313b 2069 203c 206e 426c 6f63 6b73 4c6f  1; i < nBlocksLo
+000002e0: 6e67 3b20 692b 2b29 0a20 2020 2066 762d  ng; i++).    fv-
+000002f0: 3e77 7269 7465 426c 6f63 6b28 6e42 6c6f  >writeBlock(nBlo
+00000300: 636b 4265 6769 6e20 2b20 692c 2062 6974  ckBegin + i, bit
+00000310: 5665 6374 6f72 293b 0a20 2062 6974 5665  Vector);.  bitVe
+00000320: 6374 6f72 5b30 5d20 3d20 3078 3746 3b09  ctor[0] = 0x7F;.
+00000330: 092f 2f20 302d 7468 2062 6974 206d 6172  .// 0-th bit mar
+00000340: 6b65 6420 6173 2069 6e2d 7573 650a 2020  ked as in-use.  
+00000350: 6676 2d3e 7772 6974 6542 6c6f 636b 286e  fv->writeBlock(n
+00000360: 426c 6f63 6b42 6567 696e 2c20 6269 7456  BlockBegin, bitV
+00000370: 6563 746f 7229 3b0a 0a20 202f 2f20 6d61  ector);..  // ma
+00000380: 726b 2074 6865 202a 626c 6f63 6b73 2a20  rk the *blocks* 
+00000390: 7573 6564 2062 7920 7468 6520 6269 742d  used by the bit-
+000003a0: 7665 6374 6f72 2061 7320 6e6f 7420 6672  vector as not fr
+000003b0: 6565 0a20 2066 6f72 2028 7569 6e74 2062  ee.  for (uint b
+000003c0: 6e20 3d20 6e42 6c6f 636b 4265 6769 6e20  n = nBlockBegin 
+000003d0: 2b20 6e42 6c6f 636b 734c 6f6e 6720 2d20  + nBlocksLong - 
+000003e0: 313b 2062 6e20 3e3d 206e 426c 6f63 6b42  1; bn >= nBlockB
+000003f0: 6567 696e 3b20 626e 2d2d 290a 2020 2020  egin; bn--).    
+00000400: 6676 2d3e 6662 7642 6c6f 636b 732e 7365  fv->fbvBlocks.se
+00000410: 7442 6974 2862 6e2c 2030 293b 0a20 2072  tBit(bn, 0);.  r
+00000420: 6574 7572 6e20 6e42 6c6f 636b 734c 6f6e  eturn nBlocksLon
+00000430: 673b 0a7d 0a0a 7569 6e74 2042 6974 5665  g;.}..uint BitVe
+00000440: 6374 6f72 3a3a 7265 4372 6561 7465 2846  ctor::reCreate(F
+00000450: 696c 6556 6f6c 756d 6520 2a20 7066 762c  ileVolume * pfv,
+00000460: 2075 696e 7420 6e62 6974 732c 2075 696e   uint nbits, uin
+00000470: 7420 6e62 6c6f 636b 6265 6769 6e29 0a7b  t nblockbegin).{
+00000480: 0a20 2066 7620 3d20 7066 763b 0a20 2075  .  fv = pfv;.  u
+00000490: 696e 7420 6273 7a20 3d20 6676 2d3e 7375  int bsz = fv->su
+000004a0: 7065 7242 6c6f 636b 2e6e 4279 7465 7350  perBlock.nBytesP
+000004b0: 6572 426c 6f63 6b3b 0a20 2062 6974 5665  erBlock;.  bitVe
+000004c0: 6374 6f72 203d 206e 6577 2062 7974 655b  ctor = new byte[
+000004d0: 6273 7a5d 3b0a 2020 6966 2028 6269 7456  bsz];.  if (bitV
+000004e0: 6563 746f 7220 3d3d 2030 290a 2020 2020  ector == 0).    
+000004f0: 7265 7475 726e 2030 3b09 0909 2f2f 2063  return 0;...// c
+00000500: 6f75 6c64 206e 6f74 2067 6574 206d 656d  ould not get mem
+00000510: 2066 6f72 2062 6974 5665 6374 6f72 0a0a   for bitVector..
+00000520: 2020 6e42 6974 7320 3d20 6e62 6974 733b    nBits = nbits;
+00000530: 0a20 206e 426c 6f63 6b42 6567 696e 203d  .  nBlockBegin =
+00000540: 206e 626c 6f63 6b62 6567 696e 3b0a 2020   nblockbegin;.  
+00000550: 7569 6e74 206e 6279 7465 7320 3d20 286e  uint nbytes = (n
+00000560: 6269 7473 202b 2037 2920 2f20 383b 092f  bits + 7) / 8;./
+00000570: 2f20 736f 206d 616e 7920 6279 7465 730a  / so many bytes.
+00000580: 2020 7265 7475 726e 2028 6e62 7974 6573    return (nbytes
+00000590: 202b 2062 737a 202d 2031 2920 2f20 6273   + bsz - 1) / bs
+000005a0: 7a3b 0a7d 0a0a 2f2a 2070 7265 3a3a 206e  z;.}../* pre:: n
+000005b0: 6f6e 653b 3b20 706f 7374 3a3a 2072 6574  one;; post:: ret
+000005c0: 7572 6e20 6672 6565 4269 745b 785d 2e20  urn freeBit[x]. 
+000005d0: 2a2f 0a0a 7569 6e74 2042 6974 5665 6374  */..uint BitVect
+000005e0: 6f72 3a3a 6765 7442 6974 2875 696e 7420  or::getBit(uint 
+000005f0: 7829 0a7b 0a20 2069 6620 2878 203e 206e  x).{.  if (x > n
+00000600: 4269 7473 290a 2020 2020 7265 7475 726e  Bits).    return
+00000610: 2030 3b09 0909 2f2f 2069 6c6c 6567 616c   0;...// illegal
+00000620: 2076 616c 7565 0a0a 2020 7569 6e74 2062   value..  uint b
+00000630: 737a 203d 2066 762d 3e73 7570 6572 426c  sz = fv->superBl
+00000640: 6f63 6b2e 6e42 7974 6573 5065 7242 6c6f  ock.nBytesPerBlo
+00000650: 636b 3b0a 2020 7569 6e74 2078 6279 7465  ck;.  uint xbyte
+00000660: 203d 2078 202f 2038 3b09 092f 2f20 6269   = x / 8;..// bi
+00000670: 7420 696e 6465 7820 636f 6e76 6572 7465  t index converte
+00000680: 6420 746f 2062 7974 6520 696e 6465 780a  d to byte index.
+00000690: 2020 7569 6e74 2078 626c 6f63 6b20 3d20    uint xblock = 
+000006a0: 7862 7974 6520 2f20 6273 7a3b 092f 2f20  xbyte / bsz;.// 
+000006b0: 636f 6e76 6572 7465 6420 746f 2062 6c6f  converted to blo
+000006c0: 636b 2069 6e64 6578 0a20 2066 762d 3e72  ck index.  fv->r
+000006d0: 6561 6442 6c6f 636b 286e 426c 6f63 6b42  eadBlock(nBlockB
+000006e0: 6567 696e 202b 2078 626c 6f63 6b2c 2062  egin + xblock, b
+000006f0: 6974 5665 6374 6f72 293b 0a0a 2020 7569  itVector);..  ui
+00000700: 6e74 2062 203d 2062 6974 5665 6374 6f72  nt b = bitVector
+00000710: 5b78 6279 7465 2025 2062 737a 5d3b 092f  [xbyte % bsz];./
+00000720: 2f20 6f75 7220 6e65 6564 6564 2062 6974  / our needed bit
+00000730: 2069 7320 696e 2062 0a20 2075 696e 7420   is in b.  uint 
+00000740: 6620 3d20 7820 2520 383b 0909 2f2f 2062  f = x % 8;..// b
+00000750: 6974 2066 206f 6620 6220 6973 2077 616e  it f of b is wan
+00000760: 7465 640a 2020 6220 3e3e 3d20 3720 2d20  ted.  b >>= 7 - 
+00000770: 663b 0909 092f 2f20 7269 6768 7420 7368  f;...// right sh
+00000780: 6966 7420 6220 6279 2028 372d 6629 2070  ift b by (7-f) p
+00000790: 6f73 6974 696f 6e73 0a20 2072 6574 7572  ositions.  retur
+000007a0: 6e20 6220 2620 313b 0909 092f 2f20 7265  n b & 1;...// re
+000007b0: 7475 726e 2074 6865 206c 6173 7420 6269  turn the last bi
+000007c0: 740a 7d0a 0a2f 2a20 7072 653a 3a20 763d  t.}../* pre:: v=
+000007d0: 3d30 2c20 6f72 2031 3b3b 2070 6f73 743a  =0, or 1;; post:
+000007e0: 3a20 6672 6565 4269 745b 785d 203a 3d20  : freeBit[x] := 
+000007f0: 762c 2061 6e64 2077 7269 7465 2069 7420  v, and write it 
+00000800: 746f 2074 6865 0a20 2a20 6469 736b 3b3b  to the. * disk;;
+00000810: 202a 2f0a 0a76 6f69 6420 4269 7456 6563   */..void BitVec
+00000820: 746f 723a 3a73 6574 4269 7428 7569 6e74  tor::setBit(uint
+00000830: 2078 2c20 7569 6e74 2076 290a 7b0a 2020   x, uint v).{.  
+00000840: 6966 2028 7820 3e20 6e42 6974 7329 0a20  if (x > nBits). 
+00000850: 2020 2072 6574 7572 6e3b 0909 092f 2f20     return;...// 
+00000860: 696c 6c65 6761 6c20 7661 6c75 650a 0a20  illegal value.. 
+00000870: 2075 696e 7420 6273 7a20 3d20 6676 2d3e   uint bsz = fv->
+00000880: 7375 7065 7242 6c6f 636b 2e6e 4279 7465  superBlock.nByte
+00000890: 7350 6572 426c 6f63 6b3b 0a20 2075 696e  sPerBlock;.  uin
+000008a0: 7420 7862 7974 6520 3d20 7820 2f20 383b  t xbyte = x / 8;
+000008b0: 0909 2f2f 2062 6974 2069 6e64 6578 2063  ..// bit index c
+000008c0: 6f6e 7665 7274 6564 2074 6f20 6279 7465  onverted to byte
+000008d0: 2069 6e64 6578 0a20 2075 696e 7420 7862   index.  uint xb
+000008e0: 6c6f 636b 203d 2078 6279 7465 202f 2062  lock = xbyte / b
+000008f0: 737a 3b09 2f2f 2063 6f6e 7665 7274 6564  sz;.// converted
+00000900: 2074 6f20 626c 6f63 6b20 696e 6465 780a   to block index.
+00000910: 2020 6676 2d3e 7265 6164 426c 6f63 6b28    fv->readBlock(
+00000920: 6e42 6c6f 636b 4265 6769 6e20 2b20 7862  nBlockBegin + xb
+00000930: 6c6f 636b 2c20 6269 7456 6563 746f 7229  lock, bitVector)
+00000940: 3b0a 0a20 2075 696e 7420 6620 3d20 7820  ;..  uint f = x 
+00000950: 2520 383b 0a20 2075 696e 7420 6d20 3d20  % 8;.  uint m = 
+00000960: 3120 3c3c 2028 3720 2d20 6629 3b09 2f2f  1 << (7 - f);.//
+00000970: 2030 302e 2e2e 3031 302e 2e2e 302c 2062   00...010...0, b
+00000980: 6974 2031 2069 6e20 7468 6520 662d 7468  it 1 in the f-th
+00000990: 2070 6f73 6974 696f 6e0a 2020 7569 6e74   position.  uint
+000009a0: 2062 203d 2062 6974 5665 6374 6f72 5b78   b = bitVector[x
+000009b0: 6279 7465 2025 2062 737a 5d3b 0a20 2062  byte % bsz];.  b
+000009c0: 6974 5665 6374 6f72 5b78 6279 7465 2025  itVector[xbyte %
+000009d0: 2062 737a 5d20 3d20 2876 2021 3d20 3020   bsz] = (v != 0 
+000009e0: 3f20 6220 7c20 6d20 3a20 6220 2620 7e6d  ? b | m : b & ~m
+000009f0: 293b 0a20 2066 762d 3e77 7269 7465 426c  );.  fv->writeBl
+00000a00: 6f63 6b28 6e42 6c6f 636b 4265 6769 6e20  ock(nBlockBegin 
+00000a10: 2b20 7862 6c6f 636b 2c20 6269 7456 6563  + xblock, bitVec
+00000a20: 746f 7229 3b0a 7d0a 0a2f 2a20 7072 653a  tor);.}../* pre:
+00000a30: 3a20 6e6f 6e65 203b 3b20 706f 7374 3a3a  : none ;; post::
+00000a40: 2052 6574 7572 6e20 7468 6520 6e75 6d62   Return the numb
+00000a50: 6572 2069 203e 2030 206f 6620 6120 6672  er i > 0 of a fr
+00000a60: 6565 2062 6974 2c20 6966 0a20 2a20 6176  ee bit, if. * av
+00000a70: 6169 6c61 626c 6520 692e 652e 2c20 6672  ailable i.e., fr
+00000a80: 6565 4269 745b 695d 203d 3d20 3120 616e  eeBit[i] == 1 an
+00000a90: 6420 7365 7420 7468 6520 6269 7420 746f  d set the bit to
+00000aa0: 2030 2c20 300a 202a 206f 7468 6572 7769   0, 0. * otherwi
+00000ab0: 7365 2e20 2a2f 0a0a 7569 6e74 2042 6974  se. */..uint Bit
+00000ac0: 5665 6374 6f72 3a3a 6765 7446 7265 6542  Vector::getFreeB
+00000ad0: 6974 2829 0a7b 0a20 2066 6f72 2028 7569  it().{.  for (ui
+00000ae0: 6e74 2069 203d 2031 3b20 6920 3c20 6e42  nt i = 1; i < nB
+00000af0: 6974 733b 2069 2b2b 290a 2020 2020 6966  its; i++).    if
+00000b00: 2028 6765 7442 6974 2869 2920 3d3d 2031   (getBit(i) == 1
+00000b10: 2920 7b0a 2020 2020 2020 7365 7442 6974  ) {.      setBit
+00000b20: 2869 2c20 3029 3b0a 2020 2020 2020 7265  (i, 0);.      re
+00000b30: 7475 726e 2069 3b0a 2020 2020 7d0a 2020  turn i;.    }.  
+00000b40: 7265 7475 726e 2030 3b0a 7d0a 0a2f 2f20  return 0;.}..// 
+00000b50: 2d65 6f66 2d0a                           -eof-.
+[~/current/CEG-4350.OS_internals/projects/1]ps
+  PID TTY          TIME CMD
+12006 pts/2    00:00:00 bash
+12063 pts/2    00:00:00 top
+12198 pts/2    00:00:00 ps
+[~/current/CEG-4350.OS_internals/projects/1]ps x
+  PID TTY      STAT   TIME COMMAND
+  567 tty1     Ss     0:00 -bash
+  583 ?        Ss     0:05 gpg-agent --daemon
+  596 tty1     S+     0:00 /bin/sh /usr/bin/startx
+  617 tty1     S+     0:00 xinit /etc/X11/app-defaults/xinitrc -- /etc/X11/app-defaults/xserverrc :0 -auth /home/cambio
+  625 tty1     S      0:04 i3
+  631 tty1     S      0:07 unclutter --ignore-scrolling --fork
+ 9758 ?        S      0:00 urxvt
+ 9759 pts/0    Ss+    0:00 bash
+10313 ?        S      0:00 /bin/sh -c set -- '/home/cambion/documents/recipes/IMG_20200418_0001.pdf'; zathura -- "$@"
+10314 ?        Sl     0:01 zathura -- /home/cambion/documents/recipes/IMG_20200418_0001.pdf
+11456 ?        Sl     2:13 /usr/bin/python /usr/bin/qutebrowser
+11469 ?        S      0:00 /opt/qt5/libexec/QtWebEngineProcess --type=zygote --webengine-schemes=qute:lL;qrc:sLV --lang
+11485 ?        Sl     0:05 /opt/qt5/libexec/QtWebEngineProcess --type=utility --enable-features=AllowContentInitiatedDa
+11487 ?        Sl     0:16 /opt/qt5/libexec/QtWebEngineProcess --type=zygote --webengine-schemes=qute:lL;qrc:sLV --lang
+11511 ?        R      0:00 urxvt
+11512 pts/1    Ss     0:01 bash
+11627 ?        Sl     0:03 /opt/qt5/libexec/QtWebEngineProcess --type=zygote --webengine-schemes=qute:lL;qrc:sLV --lang
+12005 pts/1    S+     0:00 script cmdsTried.txt
+12006 pts/2    Ss     0:00 bash -i
+12063 pts/2    T      0:00 top
+12199 pts/2    R+     0:00 ps x
+[~/current/CEG-4350.OS_internals/projects/1]set xx=5
+[~/current/CEG-4350.OS_internals/projects/1]w
+ 02:33:58 up  5:04,  1 user,  load average: 0.07, 0.02, 0.00
+USER     TTY        LOGIN@   IDLE   JCPU   PCPU WHAT
+cambion  tty1      21:29    5:03m 14.26s  0.00s xinit /etc/X11/app-defaults/xinitrc -- /etc/X11/app-defaults/xserverrc
+[~/current/CEG-4350.OS_internals/projects/1]There are stopped jobs.
+[~/current/CEG-4350.OS_internals/projects/1]exit
+>
+
+Script done on 2021-01-16 02:34:46-05:00 [COMMAND_EXIT_CODE="0"]
