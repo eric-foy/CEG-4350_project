@@ -1,0 +1,53 @@
+Script started on 2021-02-13 17:42:59-05:00 [TERM="rxvt-unicode-256color" TTY="/dev/pts/2" COLUMNS="169" LINES="46"]
+[~/current/CEG-4350.OS_internals/projects/1/src]./P0 < test
+test            testscript.txt  
+[~/current/CEG-4350.OS_internals/projects/1/src]./P0 < testscript.txt 
+The shell has only the following cmds:
+	cd	s
+	cp	ss
+	echo	ssss
+	inode	u
+	ls	
+	lslong	
+	mkdir	s
+	mkdisk	s
+	mkfs	s
+	mount	us
+	mount	
+	mv	ss
+	rddisk	su
+	rmdir	s
+	rm	s
+	pwd	
+	q	
+	quit	
+	umount	u
+	wrdisk	sus
+Start with ! to invoke a Unix shell cmd
+sh33% cmd [!rm -f test]
+sh33% cmd [mkfs D2]
+make33fv() = 0x1ac74e0, Name == D2, Disk# == 3
+sh33% cmd [ls]
+
+Directory listing for disk D2, cwdVNIN == 0x30001 begins:
+      1 drw-rw-rw-    1 yourName yourGroup      13 Jul 15 12:34 .
+      1 drw-rw-rw-    1 yourName yourGroup      13 Jul 15 12:34 ..
+Directory listing ends.
+sh33% cmd [ls > test]
+sh33% cmd [ls | !less]
+=
+Directory listing for disk D2, cwdVNIN == 0x30001 begins:
+      1 drw-rw-rw-    1 yourName yourGroup      13 Jul 15 12:34 .
+      1 drw-rw-rw-    1 yourName yourGroup      13 Jul 15 12:34 ..
+Directory listing ends.
+(END)sh33% cmd [!time]
+user	0m0.00s
+sys	0m0.00s
+sh33% cmd [!sleep 15 &]
+sh33% cmd [!time]
+user	0m0.00s
+sys	0m0.00s
+sh33% cmd [quit]
+[~/current/CEG-4350.OS_internals/projects/1/src]exit
+
+Script done on 2021-02-13 17:43:07-05:00 [COMMAND_EXIT_CODE="0"]
