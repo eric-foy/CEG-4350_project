@@ -90,10 +90,13 @@ SimDisk::SimDisk(byte * diskName, uint diskNumber)
 
   int fd = openDiskImage(O_RDONLY), exists = (fd >= 3); // already exists?
   if (exists) {
-    struct stat statBuf;
-    fstat(fd, &statBuf);
-   close(fd);		    // file exists, but is it a valid simDisk?
-     exists = (uint) statBuf.st_size == nSectorsPerDisk * nBytesPerSector;
+      struct stat statBuf; // var called statBuf to be of type struct stat
+                           // struct stat from stdlib
+      fstat(fd, &statBuf); // get file attributes
+      close(fd);		   
+
+      // check if the file size is what we expect
+      exists = (uint) statBuf.st_size == nSectorsPerDisk * nBytesPerSector;
   }
   if (! exists) {
     fd = makeDiskImage();
