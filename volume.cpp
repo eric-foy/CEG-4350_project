@@ -109,7 +109,8 @@ File * FileVolume::findFile(byte * leafnm)
   return newf;
 }
 
-/* pre,post:: For youTODO; */
+/* pre:: file exists, as O_CREAT was no specified
+ * post:: clobber leaf named fs33leaf with the bytes from the file at unixFilePath */
 
 uint FileVolume::write33file(byte *unixFilePath, byte *fs33leaf)
 {
@@ -133,7 +134,8 @@ uint FileVolume::write33file(byte *unixFilePath, byte *fs33leaf)
   return nBytesWritten;
 }
 
-/* pre,post:: For youTODO; */
+/* pre:: none
+ * post:: clobber the file at unixFilePath with the bytes from leaf fs33leaf. */
 
 uint FileVolume::read33file(byte *fs33leaf, byte *unixFilePath)
 {
