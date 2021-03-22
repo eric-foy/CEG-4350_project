@@ -1,1 +1,0 @@
-The last line actually invokes the command at k. It calles the function pointed to by cmdTable[K] args args.
