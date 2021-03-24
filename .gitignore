@@ -1,4 +1,4 @@
 *.o
 *.dsk
 P[0-4]
-.gitignore
+*.f33
