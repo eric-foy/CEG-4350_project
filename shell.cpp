@@ -193,8 +193,18 @@ void doMkDir(Arg *a) {
 void doRmDir(Arg *a) { TODO("doMkDir"); }
 
 void doChDir(Arg *a) {
-    byte *pnm = (byte *)a[0].s;
-    wd = new Directory(fv, wd->iNumberOf(pnm), 0);
+    if (strcmp(a[0].s, "/") == 0) {
+        wd = fv->root;
+        return;
+    }
+
+    char * base = strtok(a[0].s, "/");
+    while (base != NULL) {
+        uint in = wd->iNumberOf((byte *)base);
+        if (in > 0)
+            wd = new Directory(fv, in, 0);
+        base = strtok(NULL, "/");
+    }
 }
 
 void doPwd(Arg *a) { TODO("doPwd"); }
