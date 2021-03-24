@@ -180,9 +180,17 @@ void doInode(Arg *a) {
     wd->fv->inodes.show(ni, my_stdout);
 }
 
-void doMkDir(Arg *a) { TODO("doMkDir"); }
+void doMkDir(Arg *a) {
+    byte *pnm = (byte *)a[0].s;
+    wd->createFile(pnm, 1);
+}
 
-void doChDir(Arg *a) { TODO("doChDir"); }
+void doRmDir(Arg *a) { TODO("doMkDir"); }
+
+void doChDir(Arg *a) {
+    byte *pnm = (byte *)a[0].s;
+    wd = new Directory(fv, wd->iNumberOf(pnm), 0);
+}
 
 void doPwd(Arg *a) { TODO("doPwd"); }
 
