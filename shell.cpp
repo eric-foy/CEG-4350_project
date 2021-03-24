@@ -389,7 +389,9 @@ void findCmds() {
 }
 
 void ourgets(char *buf) {
-    fgets(buf, 1024, stdin);
+    char *line = fgets(buf, 1024, stdin);
+    if (line == NULL)
+        exit(0);
     char *p = index(buf, '\n');
     if (p) *p = 0;
 }
