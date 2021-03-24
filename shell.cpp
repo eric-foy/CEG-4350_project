@@ -182,7 +182,12 @@ void doInode(Arg *a) {
 
 void doMkDir(Arg *a) {
     byte *pnm = (byte *)a[0].s;
-    wd->createFile(pnm, 1);
+
+    uint in = wd->iNumberOf(pnm);
+    if (in == 0) {
+        in = wd->createFile(pnm, 1);
+        fprintf(my_stdout, "created directory %s with inode %d\n", a[0].s, in);
+    }
 }
 
 void doRmDir(Arg *a) { TODO("doMkDir"); }
