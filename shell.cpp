@@ -15,6 +15,10 @@ Directory *wd;
 
 #define nArgsMax 10
 #define nPipesMax 6
+#define MAXDEPTH 10
+char dirs[MAXDEPTH][1024];
+int cur_depth = 0;
+
 char types[nPipesMax][1 + nArgsMax];  // +1 for \0
 
 /* An Arg-ument for one of our commands is either a "word" (a null
@@ -121,6 +125,7 @@ void doMakeFV(Arg *a) {
 
     if (fv) {
         wd = new Directory(fv, 1, 0);
+        strcpy(dirs[cur_depth], "");
         cwdVNIN = mkVNIN(simDisk->simDiskNum, 1);
     }
 }
@@ -195,19 +200,32 @@ void doRmDir(Arg *a) { TODO("doMkDir"); }
 void doChDir(Arg *a) {
     if (strcmp(a[0].s, "/") == 0) {
         wd = fv->root;
+        cur_depth = 0;
         return;
     }
 
     char * base = strtok(a[0].s, "/");
     while (base != NULL) {
         uint in = wd->iNumberOf((byte *)base);
+        if (strcmp(base, "..") == 0) {
+            cur_depth--;
+        } else {
+            strcpy(dirs[++cur_depth], base);
+        }
         if (in > 0)
             wd = new Directory(fv, in, 0);
         base = strtok(NULL, "/");
     }
 }
 
-void doPwd(Arg *a) { TODO("doPwd"); }
+void doPwd(Arg *a) {
+    for (int i = 0; i < cur_depth; i++)
+        fprintf(my_stdout, "%s/", dirs[i]);
+    if (strcmp(dirs[cur_depth], "") == 0)
+        fprintf(my_stdout, "%s\n", "/");
+    else
+        fprintf(my_stdout, "%s\n", dirs[cur_depth]);
+}
 
 void doMv(Arg *a) { TODO("doMv"); }
 
