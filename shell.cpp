@@ -210,6 +210,15 @@ void doRmDir(Arg *a) {
     fprintf(my_stdout, "%d directory entries in %s.\n", nFiles, a[0].s);
 }
 
+void doPwd(Arg *a) {
+    for (int i = 0; i < cur_depth; i++)
+        fprintf(my_stdout, "%s/", dirs[i]);
+    if (strcmp(dirs[cur_depth], "") == 0)
+        fprintf(my_stdout, "%s\n", "/");
+    else
+        fprintf(my_stdout, "%s\n", dirs[cur_depth]);
+}
+
 void doChDir(Arg *a) {
     if (strcmp(a[0].s, "/") == 0) {
         wd = fv->root;
@@ -229,15 +238,8 @@ void doChDir(Arg *a) {
             wd = new Directory(fv, in, 0);
         base = strtok(NULL, "/");
     }
-}
 
-void doPwd(Arg *a) {
-    for (int i = 0; i < cur_depth; i++)
-        fprintf(my_stdout, "%s/", dirs[i]);
-    if (strcmp(dirs[cur_depth], "") == 0)
-        fprintf(my_stdout, "%s\n", "/");
-    else
-        fprintf(my_stdout, "%s\n", dirs[cur_depth]);
+    doPwd(a);
 }
 
 void doMv(Arg *a) { TODO("doMv"); }
