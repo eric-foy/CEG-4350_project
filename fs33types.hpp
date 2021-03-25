@@ -157,6 +157,7 @@ public:
   uint createFile(byte * leafnm, uint dirFlag);
   uint deleteFile(byte * leafnm, uint releaseFlag);
   uint moveFile(uint pn, byte * leafnm);
+  byte * nextName();
   uint ls(FILE *my_stream);
 
   FileVolume * fv;
@@ -165,7 +166,6 @@ private:
   File * dirf;			// this dir viewed as a normal file
 
   void namesEnd();		// done with file names
-  byte * nextName();
   uint setDirEntry(byte * name);
   uint lsPrivate(uint in, uint printfFlag, FILE *my_stream);
 };

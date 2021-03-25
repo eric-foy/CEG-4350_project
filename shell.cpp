@@ -195,7 +195,20 @@ void doMkDir(Arg *a) {
     }
 }
 
-void doRmDir(Arg *a) { TODO("doMkDir"); }
+void doRmDir(Arg *a) { 
+    byte *pnm = (byte *)a[0].s;
+    uint in = wd->iNumberOf(pnm);
+    uint nFiles = 0;
+
+    Directory *d = new Directory(fv, in, 0);
+    for (byte *bp = 0; (bp = d->nextName()); nFiles++);
+    if (nFiles == 2) {
+        wd->deleteFile(pnm, 1);
+    }
+    delete d;
+
+    fprintf(my_stdout, "%d directory entries in %s.\n", nFiles, a[0].s);
+}
 
 void doChDir(Arg *a) {
     if (strcmp(a[0].s, "/") == 0) {
@@ -268,7 +281,7 @@ class CmdTable {
                 {"mount", "", "", doMountDF},
                 {"mv", "ss", "v", doMv},
                 {"rddisk", "su", "", doReadDisk},
-                {"rmdir", "s", "v", doRm},
+                {"rmdir", "s", "v", doRmDir},
                 {"rm", "s", "v", doRm},
                 {"pwd", "", "v", doPwd},
                 {"q", "", "", doQuit},
