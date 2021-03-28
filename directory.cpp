@@ -205,9 +205,11 @@ uint Directory::deleteFile(byte *leafnm, uint freeInodeFlag)
  * file from from into to.
  */
 
+/*
 uint Directory::moveFile(byte *from, byte *to)
 {
 
 }
 
+*/
 // -eof-

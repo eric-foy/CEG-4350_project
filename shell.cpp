@@ -174,6 +174,21 @@ void doLsLong(Arg *a) {
     fprintf(my_stdout, "Directory listing ends.\n");
 }
 
+void doLsDir(Arg *a) {
+
+    byte *pnm = (byte *)a[0].s;
+    uint in = wd->iNumberOf(pnm);
+    if (in > 0) {
+        uint a = wd->nInode;
+        wd = new Directory(fv, in, 0);
+        fprintf(my_stdout, "\nDirectory listing for disk %s, cwdVNIN == 0x%0lx begins:\n",
+               wd->fv->simDisk->name, (ulong)cwdVNIN);
+        wd->ls(my_stdout);
+        fprintf(my_stdout, "Directory listing ends.\n");
+        wd = new Directory(fv, a, 0);
+    }
+}
+
 void doRm(Arg *a) {
     uint in = wd->deleteFile((byte *)a[0].s, 1);
     fprintf(my_stdout, "rm %s returns %d.\n", a[0].s, in);
@@ -254,16 +269,33 @@ void doMv(Arg *a) {
     byte *from = (byte *)a[0].s;
     byte *to = (byte *)a[1].s;
 
-    char from_temp[512];
-    strcpy(from_temp, "temp-");
-    strcat(from_temp, (char *)from);
-
-    uint r = fv->read33file(wd, from, (byte *)from_temp);
-
     uint in_from = wd->iNumberOf(from);
     if (in_from == 0)
         return;
     uint in_to = wd->iNumberOf(to);
+    if (fv->inodes.getType(in_from) == iTypeOrdinary) {
+        if ((fv->inodes.getType(in_to) == iTypeOrdinary) || in_to == 0) {
+            fv->copy33file(wd, from, to);
+            wd->deleteFile(from, 1);
+        } else if (fv->inodes.getType(in_to) == iTypeDirectory) {
+            char from_temp[512];
+            strcpy(from_temp, "temp-");
+            strcat(from_temp, (char *)from);
+            fv->read33file(wd, from, (byte *)from_temp);
+            wd->deleteFile(from, 1);
+            uint a = wd->nInode;
+            wd = new Directory(fv, in_to, 0);
+            fv->write33file(wd, (byte *)from_temp, from);
+            unlink(from_temp);
+            wd = new Directory(fv, a, 0);
+        }
+    } else if(fv->inodes.getType(in_from) == iTypeOrdinary) {
+        if (fv->inodes.getType(in_to) == iTypeOrdinary) {
+
+        } else if (fv->inodes.getType(in_to) == iTypeDirectory) {
+
+        }
+    }
     /*
     if ((fv->inodes.getType(in_from) == iTypeDirectory) && (in_to > 0)) {
         return;
@@ -303,6 +335,7 @@ class CmdTable {
                 {"file", "s", "v", doFile},
                 {"inode", "u", "v", doInode},
                 {"ls", "", "v", doLsLong},
+                {"lsdir", "s", "v", doLsDir},
                 {"lslong", "", "v", doLsLong},
                 {"mkdir", "s", "v", doMkDir},
                 {"mkdisk", "s", "", doMakeDisk},
