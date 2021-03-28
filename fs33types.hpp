@@ -156,7 +156,8 @@ public:
   void addLeafName(byte * leafnm, uint in);
   uint createFile(byte * leafnm, uint dirFlag);
   uint deleteFile(byte * leafnm, uint releaseFlag);
-  uint moveFile(uint pn, byte * leafnm);
+  //uint moveFile(uint pn, byte * leafnm);
+  uint moveFile(byte *from, byte *to);
   byte * nextName();
   uint ls(FILE *my_stream);
 
@@ -183,13 +184,13 @@ public:
   FileVolume(uint diskNumber);
   ~FileVolume();
   uint isOK();
-  File * findFile(byte * leafnm);
-  uint read33file(byte * fs33leafnm, byte * unixFilePath);
-  uint write33file(byte * unixFilePath, byte * fs33leafnm);
-  uint copy33file(byte * from33leafnm, byte * to33leafnm);
-  uint deleteFile(byte * fs33leafnm);
+  File *findFile(Directory *d, byte * leafnm);
+  uint read33file(Directory *d, byte * fs33leafnm, byte * unixFilePath);
+  uint write33file(Directory *d, byte * unixFilePath, byte * fs33leafnm);
+  uint copy33file(Directory *d, byte * from33leafnm, byte * to33leafnm);
+  uint deleteFile(Directory *d, byte * fs33leafnm);
   uint move(uint pn, byte * srcleafnm, uint wn, uint jn, byte * dstleafnm);
-  File * createFile(byte * leafnm, uint dirFlag);
+  File * createFile(Directory *d, byte * leafnm, uint dirFlag);
   uint writeBlock(uint nBlock, void * p);
   uint readBlock(uint nBlock, void * p);
   uint getFreeBlock();

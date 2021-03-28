@@ -102,9 +102,9 @@ FileVolume::~FileVolume()
   delete simDisk;
 }
 
-File * FileVolume::findFile(byte * leafnm)
+File * FileVolume::findFile(Directory *d, byte * leafnm)
 {
-  uint in = this->root->iNumberOf(leafnm);
+  uint in = d->iNumberOf(leafnm);
   File * newf = (in == 0? 0 : new File(this, in));
   return newf;
 }
@@ -112,14 +112,14 @@ File * FileVolume::findFile(byte * leafnm)
 /* pre:: file exists, as O_CREAT was no specified
  * post:: clobber leaf named fs33leaf with the bytes from the file at unixFilePath */
 
-uint FileVolume::write33file(byte *unixFilePath, byte *fs33leaf)
+uint FileVolume::write33file(Directory *d, byte *unixFilePath, byte *fs33leaf)
 {
   int unixFd = open((char *) unixFilePath, O_RDONLY);
   if (unixFd < 0) return 0;
 
-  this->root->deleteFile(fs33leaf, 1);  // name may already exist, try deleting
+  d->deleteFile(fs33leaf, 1);  // name may already exist, try deleting
 
-  uint in = this->root->createFile(fs33leaf, 0);
+  uint in = d->createFile(fs33leaf, 0);
 
   uint bsz = superBlock.nBytesPerBlock, nBytesWritten = 0, nr;
   File * newf = (in == 0? 0 : new File(this, in));
@@ -137,13 +137,13 @@ uint FileVolume::write33file(byte *unixFilePath, byte *fs33leaf)
 /* pre:: none
  * post:: clobber the file at unixFilePath with the bytes from leaf fs33leaf. */
 
-uint FileVolume::read33file(byte *fs33leaf, byte *unixFilePath)
+uint FileVolume::read33file(Directory * d, byte *fs33leaf, byte *unixFilePath)
 {
   int unixFd = creat((char *) unixFilePath, 0600);
   if (unixFd < 0) return 0;
 
   uint bsz = superBlock.nBytesPerBlock, nBytesWritten = 0, nr, nw, i;
-  File * newf = findFile(fs33leaf);
+  File * newf = findFile(d, fs33leaf);
   if (newf != 0) {
     byte * buf = new byte[bsz];
     for (i = 0; (nr = newf->readBlock(i++, buf)); nBytesWritten += nw)
@@ -159,14 +159,14 @@ uint FileVolume::read33file(byte *fs33leaf, byte *unixFilePath)
  * and return its i-number.  If one already exists with that name,
  * just return its inumber.  */
 
-File * FileVolume::createFile(byte *pnm, uint dirFlag)
+File * FileVolume::createFile(Directory *d, byte *pnm, uint dirFlag)
 {
   uint fin = 0;
-  File * f = findFile(pnm);
+  File * f = findFile(d, pnm);
   if (f != 0) {
     fin = f->nInode;
   } else {
-    fin = this->root->createFile(pnm, dirFlag);
+    fin = d->createFile(pnm, dirFlag);
     f =  new File(this, fin);
   }
   return f;
@@ -175,20 +175,20 @@ File * FileVolume::createFile(byte *pnm, uint dirFlag)
 /* pre:: pnm != 0, pnm[0] != 0;; post:: Remove the file (ordinary or
  * dir) named pnm[] from this directory. ;; */
 
-uint FileVolume::deleteFile(byte *leafnm)
+uint FileVolume::deleteFile(Directory *d, byte *leafnm)
 {
-  uint in = this->root->deleteFile(leafnm, 1);
+  uint in = d->deleteFile(leafnm, 1);
   return in;
 }
 
-uint FileVolume::copy33file(byte *srcleaf, byte *dstleaf)
+uint FileVolume::copy33file(Directory *d, byte *srcleaf, byte *dstleaf)
 {
   uint nBytesWritten = 0, nr, i;
   uint fwbsz = this->superBlock.nBytesPerBlock;
-  File * fi = this->findFile(srcleaf), * fo;
+  File * fi = this->findFile(d, srcleaf), * fo;
   if (fi != 0 && this->inodes.getType(fi->nInode) == iTypeOrdinary) {
-    this->deleteFile(dstleaf);
-    fo = this->createFile(dstleaf, 0);
+    this->deleteFile(d, dstleaf);
+    fo = this->createFile(d, dstleaf, 0);
     if (fo != 0) {
       byte * buf = new byte[fwbsz];
       for (i = 0; (nr = fi->readBlock(i++, buf)); nBytesWritten += nr)
@@ -204,7 +204,7 @@ uint FileVolume::copy33file(byte *srcleaf, byte *dstleaf)
 uint FileVolume::move(uint din, byte *dstleaf,
 		      uint wn, uint jn, byte *srcleaf)
 {
-  return TODO("FileVolume::move");
+
 }
 
 uint FileVolume::rdwrBlock(uint nBlock, void *p, uint writeFlag)

@@ -138,17 +138,17 @@ void doCat() {
 }
 
 void doCopyTo(byte *from, byte *to) {
-    uint r = fv->write33file(to, from);
+    uint r = fv->write33file(wd, to, from);
     fprintf(my_stdout, "write33file(%s, %s) == %d\n", to, from, r);
 }
 
 void doCopyFrom(byte *from, byte *to) {
-    uint r = fv->read33file(to, from);
+    uint r = fv->read33file(wd, to, from);
     fprintf(my_stdout, "read33file(%s, %s) == %d\n", to, from, r);
 }
 
 void doCopy33(byte *from, byte *to) {
-    uint r = fv->copy33file(to, from);
+    uint r = fv->copy33file(wd, to, from);
     fprintf(my_stdout, "copy33file(%s, %s) == %d\n", to, from, r);
 }
 
@@ -175,7 +175,7 @@ void doLsLong(Arg *a) {
 }
 
 void doRm(Arg *a) {
-    uint in = wd->fv->deleteFile((byte *)a[0].s);
+    uint in = wd->deleteFile((byte *)a[0].s, 1);
     fprintf(my_stdout, "rm %s returns %d.\n", a[0].s, in);
 }
 
@@ -183,6 +183,14 @@ void doInode(Arg *a) {
     uint ni = a[0].u;
 
     wd->fv->inodes.show(ni, my_stdout);
+}
+
+void doFile(Arg *a) {
+    byte *pnm = (byte *)a[0].s;
+    uint in = wd->iNumberOf(pnm);
+
+    if (in > 0)
+        wd->fv->inodes.show(in, my_stdout);
 }
 
 void doMkDir(Arg *a) {
@@ -242,7 +250,26 @@ void doChDir(Arg *a) {
     doPwd(a);
 }
 
-void doMv(Arg *a) { TODO("doMv"); }
+void doMv(Arg *a) {
+    byte *from = (byte *)a[0].s;
+    byte *to = (byte *)a[1].s;
+
+    char from_temp[512];
+    strcpy(from_temp, "temp-");
+    strcat(from_temp, (char *)from);
+
+    uint r = fv->read33file(wd, from, (byte *)from_temp);
+
+    uint in_from = wd->iNumberOf(from);
+    if (in_from == 0)
+        return;
+    uint in_to = wd->iNumberOf(to);
+    /*
+    if ((fv->inodes.getType(in_from) == iTypeDirectory) && (in_to > 0)) {
+        return;
+    }
+    */
+}
 
 void doMountDF(Arg *a)  // arg a ignored
 {
@@ -273,6 +300,7 @@ class CmdTable {
 } cmdTable[] = {{"cd", "s", "v", doChDir},
                 {"cp", "ss", "v", doCopy},
                 {"echo", "ssss", "", doEcho},
+                {"file", "s", "v", doFile},
                 {"inode", "u", "v", doInode},
                 {"ls", "", "v", doLsLong},
                 {"lslong", "", "v", doLsLong},

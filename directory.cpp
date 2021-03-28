@@ -202,12 +202,12 @@ uint Directory::deleteFile(byte *leafnm, uint freeInodeFlag)
 }
 
 /* pre:: pn is a dir inode, leafnm != 0, leafnm[0] != 0;; post:: Move
- * file named leafnm whose current parent is pn into this directory.;;
+ * file from from into to.
  */
 
-uint Directory::moveFile(uint pn, byte * leafnm)
+uint Directory::moveFile(byte *from, byte *to)
 {
-  return TODO("Directory::moveFile");
+
 }
 
 // -eof-
