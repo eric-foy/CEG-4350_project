@@ -275,8 +275,13 @@ void doMv(Arg *a) {
     uint in_to = wd->iNumberOf(to);
     if (fv->inodes.getType(in_from) == iTypeOrdinary) {
         if ((fv->inodes.getType(in_to) == iTypeOrdinary) || in_to == 0) {
-            fv->copy33file(wd, from, to);
+            char from_temp[512];
+            strcpy(from_temp, "temp-");
+            strcat(from_temp, (char *)from);
+            fv->read33file(wd, from, (byte *)from_temp);
             wd->deleteFile(from, 1);
+            fv->write33file(wd, (byte *)from_temp, to);
+            unlink(from_temp);
         } else if (fv->inodes.getType(in_to) == iTypeDirectory) {
             char from_temp[512];
             strcpy(from_temp, "temp-");
