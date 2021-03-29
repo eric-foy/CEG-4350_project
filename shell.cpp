@@ -289,18 +289,11 @@ void doMv(Arg *a) {
             unlink(from_temp);
             wd = new Directory(fv, a, 0);
         }
-    } else if(fv->inodes.getType(in_from) == iTypeOrdinary) {
-        if (fv->inodes.getType(in_to) == iTypeOrdinary) {
-
-        } else if (fv->inodes.getType(in_to) == iTypeDirectory) {
-
+    } else if(fv->inodes.getType(in_from) == iTypeDirectory) {
+        if (fv->inodes.getType(in_to) == iTypeDirectory) {
+            // TODO mv da db (both are path names)
         }
     }
-    /*
-    if ((fv->inodes.getType(in_from) == iTypeDirectory) && (in_to > 0)) {
-        return;
-    }
-    */
 }
 
 void doMountDF(Arg *a)  // arg a ignored

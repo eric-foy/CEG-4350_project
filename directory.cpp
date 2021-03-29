@@ -200,16 +200,3 @@ uint Directory::deleteFile(byte *leafnm, uint freeInodeFlag)
   }
   return in;
 }
-
-/* pre:: pn is a dir inode, leafnm != 0, leafnm[0] != 0;; post:: Move
- * file from from into to.
- */
-
-/*
-uint Directory::moveFile(byte *from, byte *to)
-{
-
-}
-
-*/
-// -eof-

@@ -201,12 +201,6 @@ uint FileVolume::copy33file(Directory *d, byte *srcleaf, byte *dstleaf)
   return nBytesWritten;
 }
 
-uint FileVolume::move(uint din, byte *dstleaf,
-		      uint wn, uint jn, byte *srcleaf)
-{
-
-}
-
 uint FileVolume::rdwrBlock(uint nBlock, void *p, uint writeFlag)
 {
   uint nbps = simDisk->nBytesPerSector;
