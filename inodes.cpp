@@ -5,6 +5,7 @@
 
 #include "fs33types.hpp"
 
+#define xLinkCount (fv->superBlock.iHeight - 3)
 #define xType (fv->superBlock.iHeight - 2)
 #define xFileSize (fv->superBlock.iHeight - 1)
 

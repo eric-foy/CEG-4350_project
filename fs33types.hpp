@@ -102,6 +102,8 @@ public:
   uint getType(uint in);
   uint setType(uint in, uint value);
   uint show(uint in, FILE *my_steam);
+  uint getEntry(uint in, uint x);
+  uint setEntry(uint in, uint x, uint tp);
 
 private:
   uint * uintbuffer;		// inodes from one block
@@ -109,8 +111,6 @@ private:
 
   uint *getInode(uint in, uint * ne);	// return ptr to inode in
   uint putInode(uint in);
-  uint getEntry(uint in, uint x);
-  uint setEntry(uint in, uint x, uint tp);
   uint getBlockNumberTripleIndirect(uint bn, uint nth);
   uint getBlockNumberDoubleIndirect(uint bn, uint nth);
   uint getBlockNumberSingleIndirect(uint bn, uint nth);

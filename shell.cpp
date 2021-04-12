@@ -189,6 +189,20 @@ void doLsDir(Arg *a) {
     }
 }
 
+void doLn(Arg *a) {
+    uint in = wd->iNumberOf((byte *)a[0].s);
+    if (in > 0) {
+        uint link_count = fv->inodes.getEntry(in, fv->superBlock.iHeight - 3);
+        fv->inodes.setEntry(in, fv->superBlock.iHeight - 3, link_count++);
+        wd->addLeafName((byte *)a[1].s, in);
+        //uint *pin = fv->inodes.getInode(in, 0);
+        //uint a = pin[xLinkCount];
+    }
+}
+
+void doLns(Arg *a) {
+}
+
 void doRm(Arg *a) {
     uint in = wd->deleteFile((byte *)a[0].s, 1);
     fprintf(my_stdout, "rm %s returns %d.\n", a[0].s, in);
@@ -335,6 +349,8 @@ class CmdTable {
                 {"ls", "", "v", doLsLong},
                 {"lsdir", "s", "v", doLsDir},
                 {"lslong", "", "v", doLsLong},
+                {"ln", "ss", "v", doLn},
+                {"lns", "ss", "v", doLns},
                 {"mkdir", "s", "v", doMkDir},
                 {"mkdisk", "s", "", doMakeDisk},
                 {"mkfs", "s", "", doMakeFV},
