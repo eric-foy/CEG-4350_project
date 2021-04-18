@@ -192,15 +192,38 @@ void doLsDir(Arg *a) {
 void doLn(Arg *a) {
     uint in = wd->iNumberOf((byte *)a[0].s);
     if (in > 0) {
-        uint link_count = fv->inodes.getEntry(in, fv->superBlock.iHeight - 3);
-        fv->inodes.setEntry(in, fv->superBlock.iHeight - 3, link_count++);
-        wd->addLeafName((byte *)a[1].s, in);
-        //uint *pin = fv->inodes.getInode(in, 0);
-        //uint a = pin[xLinkCount];
+        switch (fv->inodes.getType(in)) {
+            case iTypeDirectory: {
+                fprintf(my_stdout, "hard link not allowed for directory.\n");
+                break;
+            }
+            case iTypeOrdinary: {
+                uint link_count = fv->inodes.getEntry(in, fv->superBlock.iHeight - 3);
+                fv->inodes.setEntry(in, fv->superBlock.iHeight - 3, link_count++);
+                wd->addLeafName((byte *)a[1].s, in);
+                break;
+            }
+        }
     }
 }
 
 void doLns(Arg *a) {
+    uint in = wd->iNumberOf((byte *)a[0].s);
+    if (in > 0) {
+        switch (fv->inodes.getType(in)) {
+            case iTypeDirectory: {
+                    uint in2 = wd->iNumberOf((byte *)a[1].s);
+                    in2 = wd->createFile((byte *)a[1].s, 2);
+                    File *newf = new File(fv, in2);
+                    newf->appendOneBlock((byte *)a[0].s, strlen(a[0].s));
+                    delete newf;
+                    break;
+            }
+            case iTypeOrdinary: {
+                break;
+            }
+        }
+    }
 }
 
 void doRm(Arg *a) {
@@ -271,8 +294,17 @@ void doChDir(Arg *a) {
         } else {
             strcpy(dirs[++cur_depth], base);
         }
-        if (in > 0)
+        if (in > 0) {
+            if (fv->inodes.getType(in) == iTypeSoftLink) {
+                    File *newf = new File(fv, in);
+                    byte *buf = new byte[fv->superBlock.nBytesPerBlock];
+                    newf->readBlock(0, buf);
+                    in = wd->iNumberOf(buf);
+                    delete buf;
+                    delete newf;
+            }
             wd = new Directory(fv, in, 0);
+        }
         base = strtok(NULL, "/");
     }
 

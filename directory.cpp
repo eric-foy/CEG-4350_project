@@ -175,10 +175,12 @@ uint Directory::createFile(byte *leafnm, uint dirFlag)
     in = fv->inodes.getFree();
     if (in > 0) {
       addLeafName(leafnm, in);
-      if (dirFlag) {
+      if (dirFlag == 1) {
         delete new Directory(fv, in, nInode);
-      }
-      else {
+      } else if (dirFlag == 2) {
+        fv->inodes.setType(in, iTypeSoftLink);
+        fv->inodes.setEntry(in, fv->superBlock.iHeight - 3, 1);
+      } else {
         fv->inodes.setType(in, iTypeOrdinary);
         fv->inodes.setEntry(in, fv->superBlock.iHeight - 3, 1);
       }
