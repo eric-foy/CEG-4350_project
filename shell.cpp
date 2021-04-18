@@ -207,12 +207,18 @@ void doLn(Arg *a) {
     }
 }
 
+// if symlink to dir: a[0].s is directory name, not path
 void doLns(Arg *a) {
+    uint in2 = wd->iNumberOf((byte *)a[1].s);
+    if (in2 > 0) {
+        fprintf(my_stdout, "%s: file exists.\n", a[1].s);
+        return;
+    }
+
     uint in = wd->iNumberOf((byte *)a[0].s);
     if (in > 0) {
         switch (fv->inodes.getType(in)) {
             case iTypeDirectory: {
-                    uint in2 = wd->iNumberOf((byte *)a[1].s);
                     in2 = wd->createFile((byte *)a[1].s, 2);
                     File *newf = new File(fv, in2);
                     newf->appendOneBlock((byte *)a[0].s, strlen(a[0].s));
@@ -296,12 +302,12 @@ void doChDir(Arg *a) {
         }
         if (in > 0) {
             if (fv->inodes.getType(in) == iTypeSoftLink) {
-                    File *newf = new File(fv, in);
-                    byte *buf = new byte[fv->superBlock.nBytesPerBlock];
-                    newf->readBlock(0, buf);
-                    in = wd->iNumberOf(buf);
-                    delete buf;
-                    delete newf;
+                File *newf = new File(fv, in);
+                byte *buf = new byte[fv->superBlock.nBytesPerBlock];
+                newf->readBlock(0, buf);
+                in = wd->iNumberOf(buf);
+                delete buf;
+                delete newf;
             }
             wd = new Directory(fv, in, 0);
         }
