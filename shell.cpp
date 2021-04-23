@@ -190,6 +190,12 @@ void doLsDir(Arg *a) {
 }
 
 void doLn(Arg *a) {
+    uint in2 = wd->iNumberOf((byte *)a[1].s);
+    if (in2 > 0) {
+        fprintf(my_stdout, "%s: file exists.\n", a[1].s);
+        return;
+    }
+
     uint in = wd->iNumberOf((byte *)a[0].s);
     if (in > 0) {
         switch (fv->inodes.getType(in)) {
@@ -201,6 +207,7 @@ void doLn(Arg *a) {
                 uint link_count = fv->inodes.getEntry(in, fv->superBlock.iHeight - 3);
                 fv->inodes.setEntry(in, fv->superBlock.iHeight - 3, ++link_count);
                 wd->addLeafName((byte *)a[1].s, in);
+                fprintf(my_stdout, "%d\n", in);
                 break;
             }
         }
@@ -223,6 +230,7 @@ void doLns(Arg *a) {
                 File *newf = new File(fv, in2);
                 newf->appendOneBlock((byte *)a[0].s, strlen(a[0].s));
                 delete newf;
+                fprintf(my_stdout, "%d\n", in2);
                 break;
             }
             case iTypeOrdinary: {
