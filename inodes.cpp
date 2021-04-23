@@ -248,7 +248,8 @@ uint Inodes::show(uint in, FILE *my_stream) {
     for (; x < xFileSize; x++) {
         fprintf(my_stream, " %d:%d", x, pin[x]);
     }
-    fprintf(my_stream, " size=%d]\n", pin[x]);
+    fprintf(my_stream, " size=%d,", pin[x]);
+    fprintf(my_stream, " link count=%d]\n", pin[xLinkCount]);
     return 1;
 }
 

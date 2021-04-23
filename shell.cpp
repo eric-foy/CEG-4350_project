@@ -199,7 +199,7 @@ void doLn(Arg *a) {
             }
             case iTypeOrdinary: {
                 uint link_count = fv->inodes.getEntry(in, fv->superBlock.iHeight - 3);
-                fv->inodes.setEntry(in, fv->superBlock.iHeight - 3, link_count++);
+                fv->inodes.setEntry(in, fv->superBlock.iHeight - 3, ++link_count);
                 wd->addLeafName((byte *)a[1].s, in);
                 break;
             }
@@ -219,13 +219,14 @@ void doLns(Arg *a) {
     if (in > 0) {
         switch (fv->inodes.getType(in)) {
             case iTypeDirectory: {
-                    in2 = wd->createFile((byte *)a[1].s, 2);
-                    File *newf = new File(fv, in2);
-                    newf->appendOneBlock((byte *)a[0].s, strlen(a[0].s));
-                    delete newf;
-                    break;
+                in2 = wd->createFile((byte *)a[1].s, 2);
+                File *newf = new File(fv, in2);
+                newf->appendOneBlock((byte *)a[0].s, strlen(a[0].s));
+                delete newf;
+                break;
             }
             case iTypeOrdinary: {
+                TODO();
                 break;
             }
         }
