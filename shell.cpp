@@ -242,7 +242,11 @@ void doLns(Arg *a) {
 }
 
 void doRm(Arg *a) {
-    uint in = wd->deleteFile((byte *)a[0].s, 1);
+    uint in = wd->iNumberOf((byte *)a[0].s);
+    uint link_count = fv->inodes.getEntry(in, fv->superBlock.iHeight - 3);
+    fv->inodes.setEntry(in, fv->superBlock.iHeight - 3, --link_count);
+    fprintf(my_stdout, "%d\n", link_count);
+    in = wd->deleteFile((byte *)a[0].s, 1);
     fprintf(my_stdout, "rm %s returns %d.\n", a[0].s, in);
 }
 

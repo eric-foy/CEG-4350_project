@@ -203,5 +203,6 @@ uint Directory::deleteFile(byte *leafnm, uint freeInodeFlag)
       (1 + strlen((char *) leafnm) + fv->superBlock.iWidth);
     if (freeInodeFlag) fv->inodes.setFree(in);
   }
+  namesEnd();
   return in;
 }
