@@ -186,7 +186,7 @@ uint FileVolume::copy33file(Directory *d, byte *srcleaf, byte *dstleaf)
   uint nBytesWritten = 0, nr, i;
   uint fwbsz = this->superBlock.nBytesPerBlock;
   File * fi = this->findFile(d, srcleaf), * fo;
-  if (fi != 0 && this->inodes.getType(fi->nInode) == iTypeOrdinary) {
+  if (fi != 0 && (this->inodes.getType(fi->nInode) == iTypeOrdinary || this->inodes.getType(fi->nInode) == iTypeSoftLink)) {
     this->deleteFile(d, dstleaf);
     fo = this->createFile(d, dstleaf, 0);
     if (fo != 0) {

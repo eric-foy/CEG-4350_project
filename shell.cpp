@@ -338,7 +338,7 @@ void doMv(Arg *a) {
     if (in_from == 0)
         return;
     uint in_to = wd->iNumberOf(to);
-    if (fv->inodes.getType(in_from) == iTypeOrdinary) {
+    if (fv->inodes.getType(in_from) == iTypeOrdinary || fv->inodes.getType(in_from) == iTypeSoftLink ) {
         if ((fv->inodes.getType(in_to) == iTypeOrdinary) || in_to == 0) {
             char from_temp[512];
             strcpy(from_temp, "temp-");
